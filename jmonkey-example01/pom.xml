@@ -10,7 +10,7 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jmonkej-example01</artifactId>
+    <artifactId>jmonkey-example01</artifactId>
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>

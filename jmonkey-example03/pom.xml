@@ -6,8 +6,8 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.1.5</version>
-        <relativePath/>
+        <version>3.5.5</version>
+        <relativePath/> <!-- lookup parent from repository -->
     </parent>
 
     <groupId>com.example</groupId>
@@ -21,6 +21,8 @@
         <jmonkey.version>3.6.1-stable</jmonkey.version>
         <lwjgl.version>3.3.1</lwjgl.version>
         <native.maven.plugin.version>0.9.27</native.maven.plugin.version>
+        <java.version>21</java.version>
+        <lombok.version>1.18.32</lombok.version>
     </properties>
 
     <dependencies>
