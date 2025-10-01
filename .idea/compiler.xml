@@ -7,12 +7,16 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="jmonkej-example01" />
+        <module name="jmonkey-example02" />
+        <module name="jmonkey-example03" />
       </profile>
     </annotationProcessing>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
       <module name="jmonkej-example01" options="-parameters" />
+      <module name="jmonkey-example02" options="-parameters" />
+      <module name="jmonkey-example03" options="-parameters" />
     </option>
   </component>
 </project>
