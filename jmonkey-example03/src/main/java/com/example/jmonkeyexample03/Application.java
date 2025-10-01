@@ -35,7 +35,11 @@ public class Application {
         // jMonkey Engine im Main Thread starten über statische instance() Methode
         JMonkeyManager jmonkeyManager = JMonkeyManager.instance();
         if (jmonkeyManager != null) {
-            jmonkeyManager.start();
+            try {
+                jmonkeyManager.start();
+            } catch (ExceptionInInitializerError e) {
+                System.err.println("JMonkey Engine konnte nicht gestartet werden!");
+            }
         } else {
             System.err.println("JMonkeyManager nicht verfügbar!");
         }

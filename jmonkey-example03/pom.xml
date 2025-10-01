@@ -1,65 +1,206 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>3.1.5</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <relativePath/>
     </parent>
 
     <groupId>com.example</groupId>
     <artifactId>jmonkey-example03</artifactId>
     <version>1.0.0-SNAPSHOT</version>
+    <name>jmonkey-example03</name>
+    <description>jMonkey Engine 3D TileMap mit Spring Boot Native Support</description>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <java.version>17</java.version>
+        <jmonkey.version>3.6.1-stable</jmonkey.version>
+        <lwjgl.version>3.3.1</lwjgl.version>
+        <native.maven.plugin.version>0.9.27</native.maven.plugin.version>
     </properties>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.6.0</version>
-                <configuration>
-                    <mainClass>com.example.jmonkeyexample03.Application</mainClass>
-                    <options>
-                        <option>-XstartOnFirstThread</option>
-                    </options>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
-
     <dependencies>
+        <!-- Spring Boot Starter -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- jMonkey Engine Core -->
         <dependency>
             <groupId>org.jmonkeyengine</groupId>
             <artifactId>jme3-core</artifactId>
-            <version>3.6.1-stable</version>
+            <version>${jmonkey.version}</version>
         </dependency>
+
+        <!-- jMonkey Engine Desktop (LWJGL3) -->
         <dependency>
             <groupId>org.jmonkeyengine</groupId>
             <artifactId>jme3-desktop</artifactId>
-            <version>3.6.1-stable</version>
+            <version>${jmonkey.version}</version>
         </dependency>
+
+        <!-- jMonkey Engine LWJGL3 Support -->
         <dependency>
             <groupId>org.jmonkeyengine</groupId>
             <artifactId>jme3-lwjgl3</artifactId>
-            <version>3.6.1-stable</version>
+            <version>${jmonkey.version}</version>
+        </dependency>
+
+        <!-- LWJGL3 Natives für verschiedene Plattformen -->
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl</artifactId>
+            <version>${lwjgl.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl-glfw</artifactId>
+            <version>${lwjgl.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl-opengl</artifactId>
+            <version>${lwjgl.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl-openal</artifactId>
+            <version>${lwjgl.version}</version>
+        </dependency>
+
+        <!-- LWJGL3 Native Libraries -->
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl</artifactId>
+            <version>${lwjgl.version}</version>
+            <classifier>natives-macos</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl-glfw</artifactId>
+            <version>${lwjgl.version}</version>
+            <classifier>natives-macos</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl-opengl</artifactId>
+            <version>${lwjgl.version}</version>
+            <classifier>natives-macos</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl-openal</artifactId>
+            <version>${lwjgl.version}</version>
+            <classifier>natives-macos</classifier>
+        </dependency>
+
+        <!-- Spring Boot Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Spring Boot Maven Plugin mit Native Support -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <image>
+                        <builder>paketobuildpacks/builder:tiny</builder>
+                        <env>
+                            <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
+                        </env>
+                    </image>
+                </configuration>
+            </plugin>
+
+            <!-- GraalVM Native Maven Plugin -->
+            <plugin>
+                <groupId>org.graalvm.buildtools</groupId>
+                <artifactId>native-maven-plugin</artifactId>
+                <version>${native.maven.plugin.version}</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <id>test-native</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>build-native</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>compile-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <imageName>jmonkey-example03</imageName>
+                    <mainClass>com.example.jmonkeyexample03.Application</mainClass>
+                    <buildArgs>
+                        <buildArg>--no-fallback</buildArg>
+                        <buildArg>--enable-preview</buildArg>
+                        <buildArg>--initialize-at-build-time=org.slf4j</buildArg>
+                        <buildArg>--initialize-at-build-time=ch.qos.logback</buildArg>
+                        <buildArg>--initialize-at-run-time=com.sun.glass</buildArg>
+                        <buildArg>--initialize-at-run-time=com.sun.javafx</buildArg>
+                        <buildArg>--initialize-at-run-time=javafx</buildArg>
+                        <buildArg>--initialize-at-run-time=com.jme3</buildArg>
+                        <buildArg>--initialize-at-run-time=org.lwjgl</buildArg>
+                        <buildArg>--initialize-at-run-time=org.lwjgl.glfw</buildArg>
+                        <buildArg>--initialize-at-run-time=org.lwjgl.opengl</buildArg>
+                        <buildArg>--initialize-at-run-time=org.lwjgl.openal</buildArg>
+                        <buildArg>--allow-incomplete-classpath</buildArg>
+                        <buildArg>-H:+ReportExceptionStackTraces</buildArg>
+                        <buildArg>-H:+AddAllCharsets</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.properties</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.xml</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.yml</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.yaml</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.j3md</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.j3m</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.png</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.jpg</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.jpeg</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.fnt</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.glsl</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.vert</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.frag</buildArg>
+                        <!-- macOS spezifische Konfiguration für LWJGL -->
+                        <buildArg>-Dorg.lwjgl.util.NoChecks=true</buildArg>
+                        <buildArg>-Dorg.lwjgl.util.Debug=false</buildArg>
+                        <buildArg>-H:+JNI</buildArg>
+                        <buildArg>-H:ReflectionConfigurationFiles=META-INF/native-image/reflect-config.json</buildArg>
+                        <buildArg>-H:JNIConfigurationFiles=META-INF/native-image/jni-config.json</buildArg>
+                        <buildArg>--verbose</buildArg>
+                    </buildArgs>
+                    <jvmArgs>
+                        <jvmArg>-Dorg.lwjgl.util.NoChecks=true</jvmArg>
+                        <jvmArg>-Dorg.lwjgl.util.Debug=false</jvmArg>
+                    </jvmArgs>
+                </configuration>
+            </plugin>
+
+            <!-- Maven Compiler Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <release>17</release>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

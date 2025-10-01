@@ -1,0 +1,21 @@
+[
+  {
+    "name": "org.lwjgl.system.jni.JNINativeInterface"
+  },
+  {
+    "name": "org.lwjgl.system.MemoryUtil"
+  },
+  {
+    "name": "org.lwjgl.glfw.GLFWNativeCarbon"
+  },
+  {
+    "name": "org.lwjgl.glfw.GLFWNativeCocoa"
+  },
+  {
+    "name": "org.lwjgl.opengl.GL"
+  },
+  {
+    "name": "org.lwjgl.openal.AL"
+  }
+]
+
