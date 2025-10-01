@@ -110,8 +110,8 @@ public class JMonkeyManager {
         @Override
         public void simpleInitApp() {
             // Deaktiviere FPS und Statistik-Anzeige für saubere Darstellung
-            setDisplayFps(false);
-            setDisplayStatView(false);
+            setDisplayFps(true);
+            setDisplayStatView(true);
 
             // Erstelle einen Node für die TileMap
             tileMapNode = new Node("TileMap");

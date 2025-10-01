@@ -11,11 +11,12 @@
     <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jmonkey.version>3.6.1-stable</jmonkey.version>
         <lwjgl.version>3.3.1</lwjgl.version>
+        <native.maven.plugin.version>0.9.27</native.maven.plugin.version>
     </properties>
 
     <dependencies>
@@ -105,7 +106,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <release>17</release>
+                    <release>25</release>
                 </configuration>
             </plugin>
 
@@ -116,6 +117,9 @@
                 <version>3.1.0</version>
                 <configuration>
                     <mainClass>com.example.jmonkeyexample04.JMonkeyExample04Application</mainClass>
+                    <options>
+                        <option>-XstartOnFirstThread</option>
+                    </options>
                 </configuration>
             </plugin>
 
@@ -150,6 +154,53 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.0.0</version>
+            </plugin>
+
+            <!-- GraalVM Native Maven Plugin -->
+            <plugin>
+                <groupId>org.graalvm.buildtools</groupId>
+                <artifactId>native-maven-plugin</artifactId>
+                <version>${native.maven.plugin.version}</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <id>build-native</id>
+                        <goals>
+                            <goal>compile-no-fork</goal>
+                        </goals>
+                        <phase>package</phase>
+                    </execution>
+                </executions>
+                <configuration>
+                    <imageName>jmonkey-example04</imageName>
+                    <mainClass>com.example.jmonkeyexample04.JMonkeyExample04Application</mainClass>
+                    <buildArgs>
+                        <buildArg>--no-fallback</buildArg>
+                        <buildArg>--initialize-at-run-time=com.jme3</buildArg>
+                        <buildArg>--initialize-at-run-time=org.lwjgl</buildArg>
+                        <buildArg>--initialize-at-run-time=org.lwjgl.glfw</buildArg>
+                        <buildArg>--initialize-at-run-time=org.lwjgl.opengl</buildArg>
+                        <buildArg>--initialize-at-run-time=org.lwjgl.openal</buildArg>
+                        <buildArg>--allow-incomplete-classpath</buildArg>
+                        <buildArg>-H:+ReportExceptionStackTraces</buildArg>
+                        <buildArg>-H:+AddAllCharsets</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.properties</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.j3md</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.j3m</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.png</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.jpg</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.jpeg</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.glsl</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.vert</buildArg>
+                        <buildArg>-H:IncludeResources=.*\.frag</buildArg>
+                        <buildArg>-Dorg.lwjgl.util.NoChecks=true</buildArg>
+                        <buildArg>-H:+JNI</buildArg>
+                        <buildArg>--verbose</buildArg>
+                    </buildArgs>
+                    <jvmArgs>
+                        <jvmArg>-Dorg.lwjgl.util.NoChecks=true</jvmArg>
+                    </jvmArgs>
+                </configuration>
             </plugin>
         </plugins>
     </build>
@@ -232,7 +283,37 @@
                 </dependency>
             </dependencies>
         </profile>
+
+        <!-- Native Build Profile -->
+        <profile>
+            <id>native</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <version>${native.maven.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>build-native</id>
+                                <goals>
+                                    <goal>compile-no-fork</goal>
+                                </goals>
+                                <phase>package</phase>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <imageName>jmonkey-example04</imageName>
+                            <mainClass>com.example.jmonkeyexample04.JMonkeyExample04Application</mainClass>
+                            <fallback>false</fallback>
+                            <verbose>true</verbose>
+                            <sharedLibrary>false</sharedLibrary>
+                            <quickBuild>false</quickBuild>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
 </project>
-
