@@ -48,6 +48,20 @@ public class JMonkeyManager {
      */
     public void start() {
         jmonkeyApp = new TileMapApp(tileProviderService);
+
+        // Konfiguriere großes Fenster anstatt Vollbild
+        jmonkeyApp.setShowSettings(false);
+        jmonkeyApp.setPauseOnLostFocus(false);
+
+        // Setze große Fenster-Einstellungen
+        com.jme3.system.AppSettings settings = new com.jme3.system.AppSettings(true);
+        settings.setFullscreen(false); // Kein Vollbild
+        settings.setVSync(true);
+        settings.setResolution(1400, 900); // Große Fenster-Auflösung
+        settings.setTitle("JMonkey Engine - TileMap 3D Welt");
+        settings.setResizable(true); // Fenster kann vergrößert werden
+
+        jmonkeyApp.setSettings(settings);
         jmonkeyApp.start();
     }
 
@@ -75,7 +89,18 @@ public class JMonkeyManager {
         private final TileProviderService tileProviderService;
         private Node tileMapNode;
         private final int CHUNK_SIZE = 16;
-        private final int VIEW_DISTANCE = 2; // Anzahl der Chunks in jede Richtung
+        private final int VIEW_DISTANCE = 6; // Anzahl der Chunks in jede Richtung
+        private final int UNLOAD_DISTANCE = 8; // Entfernung zum Entladen von Chunks
+
+        // Tracking für geladene Chunks
+        private final java.util.Set<String> loadedChunks = new java.util.HashSet<>();
+        private final java.util.Map<String, Node> chunkNodes = new java.util.HashMap<>();
+        private int lastPlayerChunkX = Integer.MAX_VALUE;
+        private int lastPlayerChunkY = Integer.MAX_VALUE;
+
+        // Update-Timer für Chunk-Loading
+        private float chunkUpdateTimer = 0f;
+        private final float CHUNK_UPDATE_INTERVAL = 0.5f; // Alle 0.5 Sekunden prüfen
 
         public TileMapApp(TileProviderService tileProviderService) {
             this.tileProviderService = tileProviderService;
@@ -83,28 +108,33 @@ public class JMonkeyManager {
 
         @Override
         public void simpleInitApp() {
+            // Deaktiviere FPS und Statistik-Anzeige für saubere Darstellung
+            setDisplayFps(true);
+            setDisplayStatView(true);
+
             // Erstelle einen Node für die TileMap
             tileMapNode = new Node("TileMap");
             rootNode.attachChild(tileMapNode);
 
-            // Lade die initiale TileMap (mehrere Chunks um den Ursprung)
-            loadTileMap();
-
-            // Setze Kamera-Position für Side-Scrolling Ansicht von der Seite
-            cam.setLocation(new Vector3f(-15, 10, 8)); // Weiter zurück für bessere Übersicht
-            cam.lookAt(new Vector3f(8, 2, 8), Vector3f.UNIT_Y); // Blick nach rechts/vorne
+            // Setze initiale Kamera-Position
+            cam.setLocation(new Vector3f(0, 15, 0)); // Startposition über dem Zentrum
+            cam.lookAt(new Vector3f(8, 2, 8), Vector3f.UNIT_Y);
 
             // Aktiviere Fly-Kamera für Navigation
             flyCam.setEnabled(true);
-            flyCam.setMoveSpeed(8f); // Etwas schnellere Bewegung
+            flyCam.setMoveSpeed(12f); // Schnellere Bewegung für große Welt
 
-            System.out.println("jMonkey Engine TileMap mit fließenden Oberflächen geladen!");
+            // Lade die initiale TileMap um die Startposition
+            updateChunks(true);
+
+            System.out.println("jMonkey Engine TileMap mit großem Terrain geladen!");
+            System.out.println("Weltgröße: " + (tileProviderService.isChunkInBounds(50, 50) ? "200x200 Chunks" : "Unlimited"));
             System.out.println("Tile-Legende:");
             for (TileProviderService.TileType type : TileProviderService.TileType.values()) {
                 System.out.println("  " + tileProviderService.getTileInfo(type));
             }
             System.out.println("Navigation: WASD + Maus für Kamera-Bewegung");
-            System.out.println("Features: Fließende Oberflächen basierend auf Eckpunkt-Höhen");
+            System.out.println("Features: Dynamisches Chunk-Loading, fließende Oberflächen, großes Fenster");
         }
 
         /**
@@ -120,6 +150,73 @@ public class JMonkeyManager {
         }
 
         /**
+         * Aktualisiert die geladenen Chunks basierend auf der Kameraposition.
+         */
+        private void updateChunks(boolean forceUpdate) {
+            // Berechne aktuelle Chunk-Position der Kamera
+            Vector3f camPos = cam.getLocation();
+            int currentChunkX = (int) Math.floor(camPos.x / CHUNK_SIZE);
+            int currentChunkY = (int) Math.floor(camPos.z / CHUNK_SIZE);
+
+            // Prüfe ob sich die Chunk-Position geändert hat
+            if (!forceUpdate && currentChunkX == lastPlayerChunkX && currentChunkY == lastPlayerChunkY) {
+                return; // Keine Änderung
+            }
+
+            lastPlayerChunkX = currentChunkX;
+            lastPlayerChunkY = currentChunkY;
+
+            // Lade neue Chunks in VIEW_DISTANCE
+            java.util.Set<String> chunksToLoad = new java.util.HashSet<>();
+            for (int dx = -VIEW_DISTANCE; dx <= VIEW_DISTANCE; dx++) {
+                for (int dy = -VIEW_DISTANCE; dy <= VIEW_DISTANCE; dy++) {
+                    int chunkX = currentChunkX + dx;
+                    int chunkY = currentChunkY + dy;
+
+                    // Prüfe Weltgrenzen
+                    if (!tileProviderService.isChunkInBounds(chunkX, chunkY)) {
+                        continue;
+                    }
+
+                    String chunkKey = chunkX + "," + chunkY;
+                    chunksToLoad.add(chunkKey);
+
+                    // Lade Chunk falls noch nicht geladen
+                    if (!loadedChunks.contains(chunkKey)) {
+                        loadChunk(chunkX, chunkY);
+                        loadedChunks.add(chunkKey);
+                    }
+                }
+            }
+
+            // Entlade Chunks die zu weit entfernt sind
+            java.util.Iterator<String> iterator = loadedChunks.iterator();
+            while (iterator.hasNext()) {
+                String chunkKey = iterator.next();
+                String[] coords = chunkKey.split(",");
+                int chunkX = Integer.parseInt(coords[0]);
+                int chunkY = Integer.parseInt(coords[1]);
+
+                int distance = Math.max(
+                    Math.abs(chunkX - currentChunkX),
+                    Math.abs(chunkY - currentChunkY)
+                );
+
+                if (distance > UNLOAD_DISTANCE) {
+                    unloadChunk(chunkX, chunkY);
+                    iterator.remove();
+                }
+            }
+
+            // Debug-Ausgabe
+            if (forceUpdate || loadedChunks.size() % 10 == 0) {
+                System.out.println("Kamera bei Chunk (" + currentChunkX + ", " + currentChunkY +
+                                 "), Geladene Chunks: " + loadedChunks.size() +
+                                 ", Service Chunks: " + tileProviderService.getLoadedChunkCount());
+            }
+        }
+
+        /**
          * Lädt einen einzelnen Chunk und erstellt die 3D-Geometrie mit fließenden Oberflächen.
          */
         private void loadChunk(int chunkX, int chunkY) {
@@ -128,11 +225,31 @@ public class JMonkeyManager {
             Node chunkNode = new Node("Chunk_" + chunkX + "_" + chunkY);
             tileMapNode.attachChild(chunkNode);
 
+            String chunkKey = chunkX + "," + chunkY;
+            chunkNodes.put(chunkKey, chunkNode);
+
             for (int x = 0; x < CHUNK_SIZE; x++) {
                 for (int y = 0; y < CHUNK_SIZE; y++) {
                     TileProviderService.Tile tile = chunk[x][y];
                     createFlowingSurfaceGeometry(tile, chunkNode);
                 }
+            }
+        }
+
+        /**
+         * Entlädt einen Chunk und entfernt die Geometrie.
+         */
+        private void unloadChunk(int chunkX, int chunkY) {
+            String chunkKey = chunkX + "," + chunkY;
+            Node chunkNode = chunkNodes.get(chunkKey);
+
+            if (chunkNode != null) {
+                // Entferne aus der Szene
+                tileMapNode.detachChild(chunkNode);
+                chunkNodes.remove(chunkKey);
+
+                // Entlade aus dem Service (optional, für Speicher-Management)
+                tileProviderService.unloadChunk(chunkX, chunkY);
             }
         }
 
@@ -224,8 +341,13 @@ public class JMonkeyManager {
 
         @Override
         public void simpleUpdate(float tpf) {
-            // Hier könnte später dynamisches Laden/Entladen von Chunks implementiert werden
-            // basierend auf Spieler-Position
+            chunkUpdateTimer += tpf;
+
+            // Prüfe regelmäßig ob neue Chunks geladen werden müssen
+            if (chunkUpdateTimer >= CHUNK_UPDATE_INTERVAL) {
+                chunkUpdateTimer = 0f;
+                updateChunks(false);
+            }
         }
     }
 }
