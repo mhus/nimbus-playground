@@ -1,1 +1,3 @@
 # nimbus-playground
+
+-XstartOnFirstThread
