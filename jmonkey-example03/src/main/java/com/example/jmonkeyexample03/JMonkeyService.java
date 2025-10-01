@@ -79,7 +79,7 @@ public class JMonkeyService {
             for (int x = -2; x <= 2; x++) {
                 TileProviderService.Tile tile = tileProviderService.getTile(x, y);
                 System.out.printf("(%2d,%2d): %s (H:%.1f) ",
-                    x, y, tile.getType().name().substring(0, 1), tile.getHeight());
+                    x, y, tile.getType().name().substring(0, 1), tile.getAverageHeight());
             }
             System.out.println();
         }

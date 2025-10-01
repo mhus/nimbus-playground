@@ -4,10 +4,10 @@ import org.springframework.stereotype.Service;
 import java.util.Random;
 
 /**
- * Service für das dynamische Laden und Bereitstellen von Tile-Daten.
+ * Service für das dynamische Laden und Bereitstellen von Tile-Daten mit fließenden Oberflächen.
  *
  * Dieser Service generiert eine Tile-Map basierend auf Koordinaten
- * und kann später erweitert werden, um Daten aus Dateien oder Datenbanken zu laden.
+ * und definiert Höhen für Tile-Ecken um fließende Oberflächen zu erstellen.
  */
 @Service
 public class TileProviderService {
@@ -44,67 +44,112 @@ public class TileProviderService {
     }
 
     /**
-     * Klasse für ein einzelnes Tile
+     * Klasse für einen Eckpunkt mit Höheninformation
      */
-    public static class Tile {
+    public static class HeightPoint {
         private final int x, y;
-        private final TileType type;
         private final float height;
 
-        public Tile(int x, int y, TileType type, float height) {
+        public HeightPoint(int x, int y, float height) {
             this.x = x;
             this.y = y;
-            this.type = type;
             this.height = height;
         }
 
         public int getX() { return x; }
         public int getY() { return y; }
-        public TileType getType() { return type; }
         public float getHeight() { return height; }
     }
 
     /**
-     * Generiert ein Tile für die gegebenen Koordinaten.
-     *
-     * @param x X-Koordinate
-     * @param y Y-Koordinate
-     * @return Ein Tile-Objekt
+     * Klasse für ein einzelnes Tile mit Eckpunkt-Höhen für fließende Oberflächen
      */
-    public Tile getTile(int x, int y) {
-        // Einfache Noise-basierte Generierung
-        double noise = generateNoise(x, y);
+    public static class Tile {
+        private final int x, y;
+        private final TileType type;
+        private final HeightPoint[] corners; // 4 Ecken: [0]=SW, [1]=SE, [2]=NE, [3]=NW
 
-        TileType type;
-        float height = 0.0f;
-
-        if (noise < -0.3) {
-            type = TileType.WATER;
-            height = -0.2f;
-        } else if (noise < -0.1) {
-            type = TileType.SAND;
-            height = 0.1f;
-        } else if (noise < 0.3) {
-            type = TileType.GRASS;
-            height = 0.2f;
-        } else if (noise < 0.6) {
-            type = TileType.DIRT;
-            height = 0.3f;
-        } else {
-            type = TileType.STONE;
-            height = 0.5f + (float)(noise - 0.6) * 2.0f; // Berge
+        public Tile(int x, int y, TileType type, HeightPoint[] corners) {
+            this.x = x;
+            this.y = y;
+            this.type = type;
+            this.corners = corners;
         }
 
-        return new Tile(x, y, type, height);
+        public int getX() { return x; }
+        public int getY() { return y; }
+        public TileType getType() { return type; }
+        public HeightPoint[] getCorners() { return corners; }
+
+        // Convenience Methoden für die 4 Ecken
+        public float getHeightSW() { return corners[0].getHeight(); } // South-West
+        public float getHeightSE() { return corners[1].getHeight(); } // South-East
+        public float getHeightNE() { return corners[2].getHeight(); } // North-East
+        public float getHeightNW() { return corners[3].getHeight(); } // North-West
+
+        // Durchschnittshöhe für Tile-Typ Bestimmung
+        public float getAverageHeight() {
+            return (getHeightSW() + getHeightSE() + getHeightNE() + getHeightNW()) / 4.0f;
+        }
     }
 
     /**
-     * Lädt einen Chunk von Tiles (z.B. 16x16 Bereich).
+     * Generiert ein Tile für die gegebenen Koordinaten mit Eckpunkt-Höhen.
      *
-     * @param chunkX Chunk X-Koordinate
-     * @param chunkY Chunk Y-Koordinate
-     * @param chunkSize Größe des Chunks
-     * @return Array von Tiles
+     * @param x X-Koordinate
+     * @param y Y-Koordinate
+     * @return Ein Tile-Objekt mit 4 Eckpunkt-Höhen
+     */
+    public Tile getTile(int x, int y) {
+        // Generiere Höhen für die 4 Ecken des Tiles
+        HeightPoint[] corners = new HeightPoint[4];
+        corners[0] = new HeightPoint(x, y, getHeightAt(x, y));           // SW
+        corners[1] = new HeightPoint(x + 1, y, getHeightAt(x + 1, y));   // SE
+        corners[2] = new HeightPoint(x + 1, y + 1, getHeightAt(x + 1, y + 1)); // NE
+        corners[3] = new HeightPoint(x, y + 1, getHeightAt(x, y + 1));   // NW
+
+        // Bestimme Tile-Typ basierend auf Durchschnittshöhe
+        float averageHeight = (corners[0].getHeight() + corners[1].getHeight() +
+                              corners[2].getHeight() + corners[3].getHeight()) / 4.0f;
+
+        TileType type = determineTileType(averageHeight);
+
+        return new Tile(x, y, type, corners);
+    }
+
+    /**
+     * Berechnet die Höhe an einem spezifischen Punkt (x, y).
+     * Diese Methode stellt sicher, dass benachbarte Tiles gleiche Höhen an gemeinsamen Eckpunkten haben.
+     */
+    public float getHeightAt(int x, int y) {
+        // Verwende Noise-Funktion basierend auf den Koordinaten
+        double noise = generateNoise(x, y);
+
+        // Konvertiere Noise zu Höhenwerten
+        float height = (float) (noise * 2.0); // Bereich: -2.0 bis +2.0
+
+        return height;
+    }
+
+    /**
+     * Bestimmt den Tile-Typ basierend auf der Höhe
+     */
+    private TileType determineTileType(double height) {
+        if (height < -0.5) {
+            return TileType.WATER;
+        } else if (height < 0.0) {
+            return TileType.SAND;
+        } else if (height < 0.8) {
+            return TileType.GRASS;
+        } else if (height < 1.5) {
+            return TileType.DIRT;
+        } else {
+            return TileType.STONE;
+        }
+    }
+
+    /**
+     * Lädt einen Chunk von Tiles (z.B. 16x16 Bereich) mit fließenden Oberflächen.
      */
     public Tile[][] loadChunk(int chunkX, int chunkY, int chunkSize) {
         Tile[][] chunk = new Tile[chunkSize][chunkSize];
@@ -127,13 +172,14 @@ public class TileProviderService {
         // Kombination aus mehreren Oktaven für interessanteres Terrain
         double noise = 0.0;
         double amplitude = 1.0;
-        double frequency = 0.01;
+        double frequency = 0.02; // Niedrigere Frequenz für sanftere Übergänge
 
         for (int i = 0; i < 4; i++) {
-            noise += amplitude * (random.nextGaussian() * 0.1 +
-                    Math.sin(x * frequency) * Math.cos(y * frequency));
-            amplitude *= 0.5;
-            frequency *= 2.0;
+            // Verwende deterministische Noise basierend auf Koordinaten
+            double localNoise = Math.sin(x * frequency + i) * Math.cos(y * frequency + i * 0.7);
+            noise += amplitude * localNoise;
+            amplitude *= 0.6; // Weniger aggressive Reduktion für sanftere Kurven
+            frequency *= 1.8;
         }
 
         return Math.max(-1.0, Math.min(1.0, noise));
