@@ -12,10 +12,10 @@ public class JMonkeyExample04Application {
 
         try {
             // Erstelle und starte JMonkey Manager
-            JMonkeyManager manager = new JMonkeyManager();
+            JMonkeyService04 manager = new JMonkeyService04();
 
             // Zeige Terrain-Informationen
-            TileProviderService tileService = manager.getTileProviderService();
+            TileProviderService04 tileService = manager.getTileProviderService();
             System.out.println("\nTerrain-System initialisiert:");
             System.out.println("- Weltgröße: 200x200 Chunks");
             System.out.println("- Chunk-Größe: 16x16 Tiles");
@@ -23,13 +23,15 @@ public class JMonkeyExample04Application {
             System.out.println("- 8 verschiedene Biome verfügbar");
 
             System.out.println("\nVerfügbare Biome:");
-            for (TileProviderService.TileType type : TileProviderService.TileType.values()) {
+            for (TileProviderService04.TileType type : TileProviderService04.TileType.values()) {
                 System.out.println("  " + tileService.getTileInfo(type));
             }
 
             System.out.println("\nSteuerung:");
             System.out.println("  WASD - Kamera bewegen");
             System.out.println("  Maus - Kamera drehen");
+            System.out.println("  F - Wechsel zwischen Walk- und Fly-Modus (Standard: Walk)");
+            System.out.println("  Space - Springen (nur im Walk-Modus)");
             System.out.println("  ESC - Anwendung beenden");
 
             System.out.println("\nStarte jMonkey Engine...");

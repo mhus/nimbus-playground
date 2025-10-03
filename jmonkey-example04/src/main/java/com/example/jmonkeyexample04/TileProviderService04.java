@@ -9,7 +9,7 @@ import java.util.Random;
  * Generiert ein großes, persistentes Terrain mit unterschiedlichen Biomen.
  * Standalone Version ohne Spring Boot Dependencies.
  */
-public class TileProviderService {
+public class TileProviderService04 {
 
     private final Map<String, Tile[][]> loadedChunks = new HashMap<>();
     private final Random random = new Random(12345); // Feste Seed für konsistente Welt
@@ -92,6 +92,14 @@ public class TileProviderService {
         loadedChunks.put(chunkKey, chunk);
 
         return chunk;
+    }
+
+    /**
+     * Gibt einen bereits geladenen Chunk zurück, ohne ihn neu zu generieren.
+     */
+    public Tile[][] getChunk(int chunkX, int chunkY) {
+        String chunkKey = chunkX + "," + chunkY;
+        return loadedChunks.get(chunkKey);
     }
 
     /**
