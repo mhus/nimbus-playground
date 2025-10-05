@@ -166,93 +166,91 @@ public class ManualTerrainGridApp extends SimpleApplication {
     }
 
     private Material createTerrainMaterial(float[] heightData) {
-        // Verwende Terrain Lighting Material für Texture Splatting
+        // TerrainLighting Material mit Texture Splatting basierend auf absoluten Höhen
         Material mat = new Material(assetManager, "Common/MatDefs/Terrain/TerrainLighting.j3md");
 
-        // Erstelle Alpha-Map basierend auf Höhen
-        // Alpha-Map bestimmt, welche Textur wo verwendet wird
-        Image alphaMap = createAlphaMap(heightData);
-        Texture2D alphaTexture = new Texture2D(alphaMap);
-        mat.setTexture("AlphaMap", alphaTexture);
+        // Lade und konfiguriere Texturen mit GROSSER Wiederholung (wie ursprüngliches Gras)
+        Texture grass = assetManager.loadTexture("Textures/Terrain/splat/grass.jpg");
+        grass.setWrap(Texture.WrapMode.Repeat);
 
-        // Lade und setze verschiedene Texturen (oder verwende Fallback-Farben)
-        try {
-            // Textur 1 (Rot-Kanal): Sand (niedrige Höhen)
-            Texture sand = assetManager.loadTexture("Textures/Terrain/splat/dirt.jpg");
-            sand.setWrap(Texture.WrapMode.Repeat);
-            mat.setTexture("DiffuseMap", sand);
-            mat.setFloat("DiffuseMap_0_scale", 32f);
+        Texture dirt = assetManager.loadTexture("Textures/Terrain/splat/dirt.jpg");
+        dirt.setWrap(Texture.WrapMode.Repeat);
 
-            // Textur 2 (Grün-Kanal): Gras (mittlere Höhen)
-            Texture grass = assetManager.loadTexture("Textures/Terrain/splat/grass.jpg");
-            grass.setWrap(Texture.WrapMode.Repeat);
-            mat.setTexture("DiffuseMap_1", grass);
-            mat.setFloat("DiffuseMap_1_scale", 32f);
+        Texture rock = assetManager.loadTexture("Textures/Terrain/splat/road.jpg");
+        rock.setWrap(Texture.WrapMode.Repeat);
 
-            // Textur 3 (Blau-Kanal): Stein (hohe Höhen)
-            Texture rock = assetManager.loadTexture("Textures/Terrain/splat/road.jpg");
-            rock.setWrap(Texture.WrapMode.Repeat);
-            mat.setTexture("DiffuseMap_2", rock);
-            mat.setFloat("DiffuseMap_2_scale", 64f);
+        // WICHTIG: Texture Scale bestimmt wie oft die Textur wiederholt wird
+        // KLEINE Werte = Textur ist über VIELE Einheiten gespannt (weniger kachelig)
+        mat.setFloat("DiffuseMap_0_scale", 1f);  // Sand - über ganze Chunks gespannt
+        mat.setFloat("DiffuseMap_1_scale", 1f);  // Gras - über ganze Chunks gespannt
+        mat.setFloat("DiffuseMap_2_scale", 1f);  // Stein - über ganze Chunks gespannt
 
-            mat.setFloat("Shininess", 0.0f);
-        } catch (Exception e) {
-            // Fallback: Einfaches Material mit Farbe
-            System.err.println("Texturen konnten nicht geladen werden, verwende Fallback-Material");
-            mat = new Material(assetManager, "Common/MatDefs/Light/Lighting.j3md");
-            mat.setColor("Diffuse", new ColorRGBA(0.3f, 0.7f, 0.3f, 1.0f));
-            mat.setColor("Ambient", new ColorRGBA(0.2f, 0.5f, 0.2f, 1.0f));
-        }
+        mat.setTexture("DiffuseMap", dirt);     // Texture 0: Sand/Dirt (rot im Alpha)
+        mat.setTexture("DiffuseMap_1", grass);  // Texture 1: Gras (grün im Alpha)
+        mat.setTexture("DiffuseMap_2", rock);   // Texture 2: Stein (blau im Alpha)
+
+        // Alpha Map basierend auf ABSOLUTEN Höhenwerten erstellen
+        Texture2D alphaMap = new Texture2D(createAlphaMapAbsolute(heightData));
+        mat.setTexture("AlphaMap", alphaMap);
 
         return mat;
     }
 
-    private Image createAlphaMap(float[] heightData) {
-        // Alpha-Map bestimmt die Textur-Verteilung
-        // Rot-Kanal: Sand (niedrig), Grün-Kanal: Gras (mittel), Blau-Kanal: Stein (hoch)
+    private Image createAlphaMapAbsolute(float[] heightData) {
+        // Alpha-Map mit ABSOLUTEN Höhenwerten - alle Chunks verwenden die gleichen Grenzen
         int alphaMapSize = CHUNK_SIZE;
         ByteBuffer alphaBuffer = BufferUtils.createByteBuffer(alphaMapSize * alphaMapSize * 3);
 
-        // Finde Min/Max Höhe für Normalisierung
-        float minHeight = Float.MAX_VALUE;
-        float maxHeight = Float.MIN_VALUE;
-        for (float h : heightData) {
-            minHeight = Math.min(minHeight, h);
-            maxHeight = Math.max(maxHeight, h);
-        }
+        // FESTE, absolute Höhengrenzen für die gesamte Welt
+        final float SAND_HEIGHT = 8f;      // Bis 8 Einheiten: Sand
+        final float GRASS_HEIGHT = 25f;    // 8-25 Einheiten: Gras
+        // Über 25: Stein
 
-        float heightRange = maxHeight - minHeight;
-        if (heightRange < 1f) heightRange = 1f; // Verhindere Division durch 0
+        final float BLEND_DISTANCE = 10f;  // Große Übergangszone
 
         for (int i = 0; i < heightData.length; i++) {
             float height = heightData[i];
-            float normalizedHeight = (height - minHeight) / heightRange;
 
-            byte red = 0, green = 0, blue = 0;
+            float sandAmount = 0f;
+            float grassAmount = 0f;
+            float rockAmount = 0f;
 
-            // Verteilung basierend auf Höhe
-            if (normalizedHeight < 0.3f) {
-                // Niedrig: Sand
-                red = (byte) 255;
-                green = 0;
-                blue = 0;
-            } else if (normalizedHeight < 0.6f) {
-                // Mittel: Gras
-                red = 0;
-                green = (byte) 255;
-                blue = 0;
+            // Berechne Texturmischung mit weichen Übergängen
+            if (height <= SAND_HEIGHT - BLEND_DISTANCE/2) {
+                sandAmount = 1f;
+            } else if (height < SAND_HEIGHT + BLEND_DISTANCE/2) {
+                // Übergang Sand -> Gras
+                float t = (height - (SAND_HEIGHT - BLEND_DISTANCE/2)) / BLEND_DISTANCE;
+                t = smoothStep(t);
+                sandAmount = 1f - t;
+                grassAmount = t;
+            } else if (height < GRASS_HEIGHT - BLEND_DISTANCE/2) {
+                grassAmount = 1f;
+            } else if (height < GRASS_HEIGHT + BLEND_DISTANCE/2) {
+                // Übergang Gras -> Stein
+                float t = (height - (GRASS_HEIGHT - BLEND_DISTANCE/2)) / BLEND_DISTANCE;
+                t = smoothStep(t);
+                grassAmount = 1f - t;
+                rockAmount = t;
             } else {
-                // Hoch: Stein
-                red = 0;
-                green = 0;
-                blue = (byte) 255;
+                rockAmount = 1f;
             }
+
+            byte red = (byte) (sandAmount * 255);
+            byte green = (byte) (grassAmount * 255);
+            byte blue = (byte) (rockAmount * 255);
 
             alphaBuffer.put(red).put(green).put(blue);
         }
 
         alphaBuffer.flip();
         return new Image(Image.Format.RGB8, alphaMapSize, alphaMapSize, alphaBuffer, (com.jme3.texture.image.ColorSpace) null);
+    }
+
+    private float smoothStep(float t) {
+        // Smoothstep für weichere Übergänge
+        t = Math.max(0f, Math.min(1f, t)); // Clamp to 0-1
+        return t * t * (3f - 2f * t);
     }
 
     private float getTerrainHeight(float x, float z) {
