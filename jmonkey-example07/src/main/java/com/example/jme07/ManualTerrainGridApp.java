@@ -16,7 +16,9 @@ import com.jme3.math.Quaternion;
 import com.jme3.math.Vector2f;
 import com.jme3.math.Vector3f;
 import com.jme3.scene.Node;
+import com.jme3.terrain.geomipmap.TerrainLodControl;
 import com.jme3.terrain.geomipmap.TerrainQuad;
+import com.jme3.terrain.geomipmap.lodcalc.DistanceLodCalculator;
 import com.jme3.texture.Texture;
 
 import java.util.HashMap;
@@ -33,7 +35,7 @@ public class ManualTerrainGridApp extends SimpleApplication {
     private Map<Vector2f, TerrainQuad> loadedChunks = new HashMap<>();
 
     private static final int CHUNK_SIZE = 65;
-    private static final int VIEW_DISTANCE = 3; // Chunks in jede Richtung
+    private static final int VIEW_DISTANCE = 8; // Chunks in jede Richtung (erhöht für größere Sichtweite)
 
     private Vector2f lastCameraChunk = new Vector2f(Float.MAX_VALUE, Float.MAX_VALUE);
 
@@ -273,6 +275,12 @@ public class ManualTerrainGridApp extends SimpleApplication {
             float worldX = chunkX * (CHUNK_SIZE - 1);
             float worldZ = chunkZ * (CHUNK_SIZE - 1);
             terrain.setLocalTranslation(worldX, 0, worldZ);
+
+            // LOD (Level of Detail) für bessere Performance
+            // Entfernte Chunks werden mit weniger Detail gerendert
+            TerrainLodControl lodControl = new TerrainLodControl(terrain, cam);
+            lodControl.setLodCalculator(new DistanceLodCalculator(CHUNK_SIZE, 2.7f));
+            terrain.addControl(lodControl);
 
             // Füge zur Szene hinzu
             terrainNode.attachChild(terrain);
