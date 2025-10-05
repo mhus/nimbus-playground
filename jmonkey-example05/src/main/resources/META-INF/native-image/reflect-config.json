@@ -1,0 +1,31 @@
+[
+  {
+    "name":"com.jme3.app.Application",
+    "allDeclaredConstructors":true,
+    "allPublicConstructors":true,
+    "allDeclaredMethods":true,
+    "allPublicMethods":true
+  },
+  {
+    "name":"com.jme3.system.lwjgl.LwjglContext",
+    "allDeclaredConstructors":true,
+    "allPublicConstructors":true,
+    "allDeclaredMethods":true,
+    "allPublicMethods":true
+  },
+  {
+    "name":"com.jme3.system.lwjgl.LwjglDisplay",
+    "allDeclaredConstructors":true,
+    "allPublicConstructors":true,
+    "allDeclaredMethods":true,
+    "allPublicMethods":true
+  },
+  {
+    "name":"com.jme3.renderer.lwjgl.LwjglRenderer",
+    "allDeclaredConstructors":true,
+    "allPublicConstructors":true,
+    "allDeclaredMethods":true,
+    "allPublicMethods":true
+  }
+]
+

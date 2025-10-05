@@ -1,6 +1,9 @@
 package com.example.jmonkeyexample04;
 
 import com.jme3.app.SimpleApplication;
+import com.jme3.input.CameraInput;
+import com.jme3.input.MouseInput;
+import com.jme3.input.controls.MouseAxisTrigger;
 import com.jme3.material.Material;
 import com.jme3.math.ColorRGBA;
 import com.jme3.math.Vector3f;
@@ -85,6 +88,10 @@ public class TileMapApp04 extends SimpleApplication implements ActionListener {
         System.out.println("F-Taste: Wechsel zwischen Walk- und Fly-Modus (Standard: Walk)");
         System.out.println("Space-Taste: Springen (nur im Walk-Modus)");
         System.out.println("Features: Dynamisches Chunk-Loading, fließende Oberflächen, großes Fenster");
+
+        inputManager.addMapping(CameraInput.FLYCAM_FORWARD, new KeyTrigger(KeyInput.KEY_UP));
+
+        inputManager.addMapping(CameraInput.FLYCAM_BACKWARD, new KeyTrigger(KeyInput.KEY_DOWN));
 
         // Starte im Walk-Modus
         setWalkMode();

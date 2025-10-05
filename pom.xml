@@ -12,5 +12,7 @@
         <module>jmonkey-example02</module>
         <module>jmonkey-example03</module>
         <module>jmonkey-example04</module>
+        <module>jmonkey-example05</module>
+        <module>jmonkey-example06</module>
     </modules>
 </project>

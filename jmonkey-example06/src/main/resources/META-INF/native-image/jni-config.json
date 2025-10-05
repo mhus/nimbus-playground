@@ -1,0 +1,16 @@
+[
+  {
+    "name":"org.lwjgl.system.MemoryUtil",
+    "methods":[
+      {"name":"memAddress","parameterTypes":["java.nio.Buffer"]},
+      {"name":"memByteBuffer","parameterTypes":["long","int"]}
+    ]
+  },
+  {
+    "name":"org.lwjgl.opengl.GL11",
+    "methods":[
+      {"name":"glGetString","parameterTypes":["int"]}
+    ]
+  }
+]
+
