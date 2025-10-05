@@ -7,10 +7,7 @@ import com.jme3.input.controls.ActionListener;
 import com.jme3.input.controls.AnalogListener;
 import com.jme3.input.controls.KeyTrigger;
 import com.jme3.input.controls.MouseAxisTrigger;
-import com.jme3.light.AmbientLight;
-import com.jme3.light.DirectionalLight;
 import com.jme3.material.Material;
-import com.jme3.math.ColorRGBA;
 import com.jme3.math.FastMath;
 import com.jme3.math.Quaternion;
 import com.jme3.math.Vector2f;
@@ -50,19 +47,22 @@ public class ManualTerrainGridApp extends SimpleApplication {
     private float verticalVelocity = 0f;
     private static final float GROUND_OFFSET = 2.0f; // Höhe über dem Terrain
 
+    // Layer System
+    private SkyLayer skyLayer;
+    private BackdropLayer backdropLayer;
+    private EffectLayer effectLayer;
+
     @Override
     public void simpleInitApp() {
         setDisplayFps(true);
         setDisplayStatView(true);
 
-        viewPort.setBackgroundColor(new ColorRGBA(0.5f, 0.7f, 1.0f, 1.0f));
-
         terrainNode = new Node("TerrainNode");
         rootNode.attachChild(terrainNode);
 
         initTileProvider();
-        initLighting();
         initKeys();
+        initLayers();
 
         // Kamera
         cam.setLocation(new Vector3f(64, 80, 64));
@@ -75,21 +75,26 @@ public class ManualTerrainGridApp extends SimpleApplication {
         System.out.println("Modus: WALK MODE (Drücke 'F' zum Umschalten)");
     }
 
+    private void initLayers() {
+        // Layer-System: Sky -> Backdrop -> Fog
+        // Reihenfolge wichtig für korrektes Rendering
+
+        // 1. Sky Layer - Himmel im Hintergrund mit Sonnen-Glow
+        skyLayer = new SkyLayer(assetManager, rootNode, cam, viewPort);
+
+        // 2. Backdrop Layer - Ferne Berge/Landschaft
+        backdropLayer = new BackdropLayer(assetManager, rootNode, cam);
+
+        // 3. Effect Layer - Nebel nur am Horizont (nicht über der Sonne)
+        effectLayer = new EffectLayer(assetManager, viewPort);
+        effectLayer.initFogGeometry(assetManager, rootNode, cam);
+    }
+
     private void initTileProvider() {
         tileProvider = new ProceduralTileProvider(12345L, 0.02f, 40f);
         System.out.println("TileProvider: " + tileProvider.getName());
     }
 
-    private void initLighting() {
-        AmbientLight ambient = new AmbientLight();
-        ambient.setColor(ColorRGBA.White.mult(0.5f));
-        rootNode.addLight(ambient);
-
-        DirectionalLight sun = new DirectionalLight();
-        sun.setDirection(new Vector3f(-0.5f, -0.7f, -0.3f).normalizeLocal());
-        sun.setColor(ColorRGBA.White.mult(1.5f));
-        rootNode.addLight(sun);
-    }
 
     private void initKeys() {
         // Toggle zwischen Walk und Flight Mode mit 'F'
@@ -115,6 +120,17 @@ public class ManualTerrainGridApp extends SimpleApplication {
 
     @Override
     public void simpleUpdate(float tpf) {
+        // Update Layer System
+        if (skyLayer != null) {
+            skyLayer.update(tpf);
+        }
+        if (backdropLayer != null) {
+            backdropLayer.update(tpf);
+        }
+        if (effectLayer != null) {
+            effectLayer.update(tpf);
+        }
+
         // Chunk-Management zuerst
         Vector3f camPos = cam.getLocation();
         int chunkX = (int) Math.floor(camPos.x / (CHUNK_SIZE - 1));
