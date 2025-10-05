@@ -139,13 +139,19 @@
                 </configuration>
             </plugin>
 
-            <!-- Maven Exec Plugin für einfache Ausführung -->
+            <!-- Exec Plugin mit macOS-spezifischen JVM-Argumenten -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.1.0</version>
                 <configuration>
-                    <mainClass>com.example.jmonkeyexample06.JMonkeyExample06Application</mainClass>
+                    <mainClass>com.example.jmonkeyexample06.Application</mainClass>
+                    <commandlineArgs>-XstartOnFirstThread</commandlineArgs>
+                    <options>
+                        <option>-XstartOnFirstThread</option>
+                        <option>-Dfile.encoding=UTF-8</option>
+                        <option>-Djava.awt.headless=false</option>
+                    </options>
                 </configuration>
             </plugin>
 
@@ -166,14 +172,11 @@
                 </executions>
                 <configuration>
                     <imageName>jmonkey-example06-native</imageName>
-                    <mainClass>com.example.jmonkeyexample06.JMonkeyExample06Application</mainClass>
+                    <mainClass>com.example.jmonkeyexample06.Application</mainClass>
                     <buildArgs>
                         <buildArg>--no-fallback</buildArg>
-                        <buildArg>--enable-preview</buildArg>
-                        <buildArg>--report-unsupported-elements-at-runtime</buildArg>
-                        <buildArg>--allow-incomplete-classpath</buildArg>
-                        <buildArg>-H:+ReportExceptionStackTraces</buildArg>
-                        <buildArg>-H:ConfigurationFileDirectories=src/main/resources/META-INF/native-image/</buildArg>
+                        <buildArg>--initialize-at-build-time=org.lwjgl</buildArg>
+                        <buildArg>--initialize-at-run-time=org.lwjgl.glfw.GLFW</buildArg>
                     </buildArgs>
                 </configuration>
             </plugin>

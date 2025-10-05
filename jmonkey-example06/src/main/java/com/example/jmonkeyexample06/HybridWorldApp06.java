@@ -1,6 +1,8 @@
 package com.example.jmonkeyexample06;
 
 import com.jme3.app.SimpleApplication;
+import com.jme3.export.JmeExporter;
+import com.jme3.export.JmeImporter;
 import com.jme3.input.KeyInput;
 import com.jme3.input.controls.ActionListener;
 import com.jme3.input.controls.KeyTrigger;
@@ -14,51 +16,39 @@ import com.jme3.post.filters.FogFilter;
 import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.scene.*;
 import com.jme3.scene.control.BillboardControl;
-import com.jme3.scene.shape.Box;
 import com.jme3.scene.shape.Quad;
 import com.jme3.scene.shape.Sphere;
+import com.jme3.terrain.geomipmap.TerrainGrid;
+import com.jme3.terrain.geomipmap.TerrainLodControl;
+import com.jme3.terrain.geomipmap.TerrainGridTileLoader;
 import com.jme3.terrain.geomipmap.TerrainQuad;
+import com.jme3.terrain.heightmap.AbstractHeightMap;
 import com.jme3.texture.Texture;
-import com.jme3.util.BufferUtils;
 
-import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
+import java.io.IOException;
 
 /**
- * Hybrid World App die TileProviderService06 mit erweiterten Rendering-Features kombiniert.
- * Beinhaltet: Dynamisches Terrain, Skybox, Wolken, Nebel, Sonne und Walk/Fly Modus.
+ * Hybrid World App die TileProviderService06 mit TerrainGrid kombiniert.
+ * Beinhaltet: Dynamisches TerrainGrid, Skybox, Wolken, Nebel, Sonne und Walk/Fly Modus.
  */
 public class HybridWorldApp06 extends SimpleApplication implements ActionListener {
 
     private final TileProviderService06 tileProviderService;
-    private Node tileMapNode;
-    private final int CHUNK_SIZE = 16;
-    private final int VIEW_DISTANCE = 3;
-    private final int UNLOAD_DISTANCE = 5;
-
-    // Tracking für geladene Chunks
-    private final java.util.Set<String> loadedChunks = new java.util.HashSet<>();
-    private final java.util.Map<String, Node> chunkNodes = new java.util.HashMap<>();
-    private int lastPlayerChunkX = Integer.MAX_VALUE;
-    private int lastPlayerChunkY = Integer.MAX_VALUE;
-
-    // Update-Timer für Chunk-Loading
-    private float chunkUpdateTimer = 0f;
-    private final float CHUNK_UPDATE_INTERVAL = 0.5f;
+    private TerrainGrid terrainGrid;
+    private final int PATCH_SIZE = 65; // Muss eine 2^n+1 Größe sein (33, 65, 129, etc.)
+    private final int TOTAL_SIZE = 513; // Gesamtgröße des Terrains
 
     // Walk/Fly Modus Variablen
     private boolean isFlightMode = false;
     private static final String TOGGLE_FLIGHT = "ToggleFlight";
     private static final String JUMP = "Jump";
-    private Vector3f velocity = new Vector3f(0, 0, 0);
+    private final Vector3f velocity = new Vector3f(0, 0, 0);
     private final float GRAVITY = -9.81f;
     private final float GROUND_HEIGHT = 2.0f;
     private final float JUMP_FORCE = 8.0f;
     private boolean isOnGround = false;
 
     // Atmosphärische Elemente
-    private Material cloudMat;
-    private Geometry sunGeom;
     private Node cloudNode;
     private float cloudTime = 0;
 
@@ -71,10 +61,6 @@ public class HybridWorldApp06 extends SimpleApplication implements ActionListene
         // Deaktiviere FPS und Statistik-Anzeige für saubere Darstellung
         setDisplayFps(true);
         setDisplayStatView(true);
-
-        // Erstelle einen Node für die TileMap
-        tileMapNode = new Node("TileMap");
-        rootNode.attachChild(tileMapNode);
 
         // Input-Mapping
         setupInputMapping();
@@ -98,8 +84,8 @@ public class HybridWorldApp06 extends SimpleApplication implements ActionListene
         // Starte im Walk-Modus
         setWalkMode();
 
-        System.out.println("Hybrid World mit TileProvider geladen!");
-        System.out.println("Features: Dynamisches Terrain, Atmosphäre, Walk/Fly Modus");
+        System.out.println("Hybrid World mit TerrainGrid geladen!");
+        System.out.println("Features: Dynamisches TerrainGrid, Atmosphäre, Walk/Fly Modus");
     }
 
     private void setupInputMapping() {
@@ -109,11 +95,191 @@ public class HybridWorldApp06 extends SimpleApplication implements ActionListene
     }
 
     /**
-     * Nahbereich: TileProvider-basiertes Terrain mit dynamischem Loading
+     * Nahbereich: TerrainGrid-basiertes Terrain mit dynamischem Loading
      */
     private void initNearTerrain() {
-        // Lade die initiale TileMap um die Startposition
-        updateChunks(true);
+        // Erstelle einen Custom Terrain Tile Loader für unseren TileProvider
+        TileProviderTerrainTileLoader tileLoader = new TileProviderTerrainTileLoader();
+
+        // Erstelle TerrainGrid
+        terrainGrid = new TerrainGrid("TerrainGrid", PATCH_SIZE, TOTAL_SIZE, tileLoader);
+
+        // Setze Material NACH der TerrainGrid Erstellung
+        Material terrainMaterial = createTerrainMaterial();
+        terrainGrid.setMaterial(terrainMaterial);
+
+        terrainGrid.setLocalTranslation(0, 0, 0);
+        terrainGrid.setLocalScale(1f, 1f, 1f);
+
+        // Füge LOD Control hinzu für bessere Performance
+        TerrainLodControl lodControl = new TerrainLodControl(terrainGrid, getCamera());
+        terrainGrid.addControl(lodControl);
+
+        rootNode.attachChild(terrainGrid);
+
+        System.out.println("TerrainGrid initialisiert mit Patch-Größe: " + PATCH_SIZE);
+        System.out.println("TerrainGrid Position: " + terrainGrid.getLocalTranslation());
+    }
+
+    /**
+     * Erstellt ein Material für das Terrain mit Texturen basierend auf Höhe
+     */
+    private Material createTerrainMaterial() {
+        // Fallback auf einfaches Material da die Terrain-Shader Alpha-Maps benötigen
+        Material terrainMaterial = new Material(assetManager, "Common/MatDefs/Light/Lighting.j3md");
+
+        try {
+            Texture grass = assetManager.loadTexture("Textures/Terrain/splat/grass.jpg");
+            grass.setWrap(Texture.WrapMode.Repeat);
+            terrainMaterial.setTexture("DiffuseMap", grass);
+        } catch (Exception e) {
+            System.out.println("Terrain-Texturen nicht verfügbar: " + e.getMessage());
+            terrainMaterial.setColor("Diffuse", ColorRGBA.Green);
+        }
+
+        terrainMaterial.setColor("Ambient", ColorRGBA.Green.mult(0.3f));
+        terrainMaterial.setFloat("Shininess", 10f);
+
+        return terrainMaterial;
+    }
+
+    /**
+     * Custom Terrain Tile Loader der unseren TileProvider verwendet
+     */
+    private class TileProviderTerrainTileLoader implements TerrainGridTileLoader {
+
+        private int quadSize = PATCH_SIZE;
+
+        @Override
+        public TerrainQuad getTerrainQuadAt(Vector3f location) {
+            // Debug-Ausgabe
+            System.out.println("Lade TerrainQuad für Position: " + location);
+
+            // Konvertiere World-Position zu Chunk-Koordinaten
+            int chunkX = (int) Math.floor(location.x / quadSize);
+            int chunkY = (int) Math.floor(location.z / quadSize);
+
+            System.out.println("Chunk-Koordinaten: (" + chunkX + ", " + chunkY + ")");
+
+            // Erstelle HeightMap für diesen Chunk
+            TileProviderHeightMap heightMap = new TileProviderHeightMap(chunkX, chunkY, quadSize);
+
+            // Prüfe ob HeightMap valide Daten hat
+            if (heightMap.getHeightMap() == null || heightMap.getHeightMap().length == 0) {
+                System.out.println("FEHLER: HeightMap ist leer!");
+                return null;
+            }
+
+            // Erstelle TerrainQuad aus der HeightMap
+            // Die Größe (quadSize+1) muss der tatsächlichen heightMap-Größe entsprechen
+            TerrainQuad terrain = new TerrainQuad("terrain_" + chunkX + "_" + chunkY, quadSize, heightMap.getSize(), heightMap.getHeightMap());
+            terrain.setMaterial(createTerrainMaterial());
+
+            System.out.println("TerrainQuad erstellt: " + terrain.getName());
+            return terrain;
+        }
+
+        @Override
+        public void setPatchSize(int patchSize) {
+            // Die Patch-Größe sollte eine 2^n+1 Größe sein (33, 65, 129, etc.)
+            if (patchSize < 3) {
+                throw new IllegalArgumentException("Patch-Größe muss mindestens 3 sein");
+            }
+            // Überprüfe ob es eine gültige 2^n+1 Größe ist
+            int n = patchSize - 1;
+            if ((n & (n - 1)) != 0) {
+                System.out.println("Warnung: Patch-Größe " + patchSize + " ist nicht optimal (sollte 2^n+1 sein)");
+            }
+            this.quadSize = patchSize;
+            System.out.println("Patch-Größe gesetzt auf: " + patchSize);
+        }
+
+        @Override
+        public void setQuadSize(int quadSize) {
+            this.quadSize = quadSize;
+        }
+
+        @Override
+        public void write(JmeExporter ex) throws IOException {
+            // Exportiere die Konfiguration des TileLoaders
+            if (ex != null) {
+                ex.getCapsule(this).write(quadSize, "quadSize", PATCH_SIZE);
+            }
+        }
+
+        @Override
+        public void read(JmeImporter im) throws IOException {
+            // Importiere die Konfiguration des TileLoaders
+            if (im != null) {
+                this.quadSize = im.getCapsule(this).readInt("quadSize", PATCH_SIZE);
+            }
+        }
+    }
+
+    /**
+     * Custom HeightMap die Daten vom TileProvider bezieht
+     */
+    private class TileProviderHeightMap extends AbstractHeightMap {
+        private final int chunkX, chunkY;
+
+        public TileProviderHeightMap(int chunkX, int chunkY, int size) {
+            this.chunkX = chunkX;
+            this.chunkY = chunkY;
+            this.size = size;
+            load();
+        }
+
+        @Override
+        public boolean load() {
+            System.out.println("Lade HeightMap für Chunk (" + chunkX + ", " + chunkY + ") mit Größe " + size);
+
+            heightData = new float[size * size];
+
+            try {
+                // Lade Chunk-Daten vom TileProvider
+                TileProviderService06.Tile[][] chunk = tileProviderService.loadChunk(chunkX, chunkY, size);
+
+                System.out.println("Chunk geladen: " + chunk.length + "x" + chunk[0].length);
+
+                for (int y = 0; y < size; y++) {
+                    for (int x = 0; x < size; x++) {
+                        int index = y * size + x;
+
+                        if (y < chunk.length && x < chunk[0].length && chunk[y][x] != null) {
+                            TileProviderService06.Tile tile = chunk[y][x];
+                            // Verwende Durchschnittshöhe des Tiles und skaliere sie
+                            float height = tile.getAverageHeight() * 20f; // Stärkere Skalierung für sichtbare Höhenunterschiede
+                            heightData[index] = height;
+                        } else {
+                            // Fallback: Erstelle einfache Höhenvariationen
+                            float height = (float) (Math.sin(x * 0.1) * Math.cos(y * 0.1) * 5 + 10);
+                            heightData[index] = height;
+                        }
+                    }
+                }
+
+                System.out.println("HeightData generiert: " + heightData.length + " Punkte");
+
+                // Debug: Zeige erste paar Höhenwerte
+                System.out.print("Erste Höhenwerte: ");
+                for (int i = 0; i < Math.min(10, heightData.length); i++) {
+                    System.out.print(heightData[i] + " ");
+                }
+                System.out.println();
+
+                return true;
+
+            } catch (Exception e) {
+                System.out.println("FEHLER beim Laden der HeightMap: " + e.getMessage());
+                e.printStackTrace();
+
+                // Fallback: Erstelle flaches Terrain mit leichten Variationen
+                for (int i = 0; i < heightData.length; i++) {
+                    heightData[i] = 10f + (float) (Math.random() * 5);
+                }
+                return true;
+            }
+        }
     }
 
     /**
@@ -171,7 +337,7 @@ public class HybridWorldApp06 extends SimpleApplication implements ActionListene
         Sphere cloudDome = new Sphere(32, 32, 5000);
         Geometry clouds = new Geometry("clouds", cloudDome);
 
-        cloudMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        Material cloudMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         cloudMat.setColor("Color", new ColorRGBA(1, 1, 1, 0.5f));
         cloudMat.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Alpha);
 
@@ -198,7 +364,7 @@ public class HybridWorldApp06 extends SimpleApplication implements ActionListene
 
         // Sichtbare Sonne als Billboard
         Quad sunQuad = new Quad(200, 200);
-        sunGeom = new Geometry("Sun", sunQuad);
+        Geometry sunGeom = new Geometry("Sun", sunQuad);
 
         Material sunMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         sunMat.setColor("Color", new ColorRGBA(1.0f, 1.0f, 0.7f, 1.0f));
@@ -231,260 +397,12 @@ public class HybridWorldApp06 extends SimpleApplication implements ActionListene
         }
     }
 
-    /**
-     * Aktualisiert die geladenen Chunks basierend auf der Kameraposition.
-     */
-    private void updateChunks(boolean forceUpdate) {
-        // Berechne aktuelle Chunk-Position der Kamera
-        Vector3f camPos = cam.getLocation();
-        int currentChunkX = (int) Math.floor(camPos.x / CHUNK_SIZE);
-        int currentChunkY = (int) Math.floor(camPos.z / CHUNK_SIZE);
-
-        // Prüfe ob sich die Chunk-Position geändert hat
-        if (!forceUpdate && currentChunkX == lastPlayerChunkX && currentChunkY == lastPlayerChunkY) {
-            return;
-        }
-
-        lastPlayerChunkX = currentChunkX;
-        lastPlayerChunkY = currentChunkY;
-
-        // Lade neue Chunks in VIEW_DISTANCE
-        for (int dx = -VIEW_DISTANCE; dx <= VIEW_DISTANCE; dx++) {
-            for (int dy = -VIEW_DISTANCE; dy <= VIEW_DISTANCE; dy++) {
-                int chunkX = currentChunkX + dx;
-                int chunkY = currentChunkY + dy;
-
-                if (!tileProviderService.isChunkInBounds(chunkX, chunkY)) {
-                    continue;
-                }
-
-                String chunkKey = chunkX + "," + chunkY;
-
-                if (!loadedChunks.contains(chunkKey)) {
-                    loadChunk(chunkX, chunkY);
-                    loadedChunks.add(chunkKey);
-                }
-            }
-        }
-
-        // Entlade Chunks die zu weit entfernt sind
-        java.util.Iterator<String> iterator = loadedChunks.iterator();
-        while (iterator.hasNext()) {
-            String chunkKey = iterator.next();
-            String[] coords = chunkKey.split(",");
-            int chunkX = Integer.parseInt(coords[0]);
-            int chunkY = Integer.parseInt(coords[1]);
-
-            int distance = Math.max(
-                    Math.abs(chunkX - currentChunkX),
-                    Math.abs(chunkY - currentChunkY)
-            );
-
-            if (distance > UNLOAD_DISTANCE) {
-                unloadChunk(chunkX, chunkY);
-                iterator.remove();
-            }
-        }
-
-        if (forceUpdate || loadedChunks.size() % 10 == 0) {
-            System.out.println("Kamera bei Chunk (" + currentChunkX + ", " + currentChunkY +
-                    "), Geladene Chunks: " + loadedChunks.size());
-        }
-    }
-
-    /**
-     * Lädt einen einzelnen Chunk und erstellt die 3D-Geometrie mit fließenden Oberflächen.
-     */
-    private void loadChunk(int chunkX, int chunkY) {
-        TileProviderService06.Tile[][] chunk = tileProviderService.loadChunk(chunkX, chunkY, CHUNK_SIZE);
-
-        Node chunkNode = new Node("Chunk_" + chunkX + "_" + chunkY);
-        tileMapNode.attachChild(chunkNode);
-
-        String chunkKey = chunkX + "," + chunkY;
-        chunkNodes.put(chunkKey, chunkNode);
-
-        for (int x = 0; x < CHUNK_SIZE; x++) {
-            for (int y = 0; y < CHUNK_SIZE; y++) {
-                TileProviderService06.Tile tile = chunk[x][y];
-                createFlowingSurfaceGeometry(tile, chunkNode);
-            }
-        }
-    }
-
-    /**
-     * Entlädt einen Chunk und entfernt die Geometrie.
-     */
-    private void unloadChunk(int chunkX, int chunkY) {
-        String chunkKey = chunkX + "," + chunkY;
-        Node chunkNode = chunkNodes.get(chunkKey);
-
-        if (chunkNode != null) {
-            tileMapNode.detachChild(chunkNode);
-            chunkNodes.remove(chunkKey);
-            tileProviderService.unloadChunk(chunkX, chunkY);
-        }
-    }
-
-    /**
-     * Erstellt die 3D-Geometrie für ein einzelnes Tile mit fließender Oberfläche.
-     */
-    private void createFlowingSurfaceGeometry(TileProviderService06.Tile tile, Node parentNode) {
-        float tileSize = 1.0f;
-
-        // Erstelle ein custom Mesh für die fließende Oberfläche
-        Mesh tileMesh = createTileMesh(tile, tileSize);
-
-        Geometry tileGeom = new Geometry("FlowingTile_" + tile.getX() + "_" + tile.getY(), tileMesh);
-
-        // Material basierend auf Tile-Typ erstellen mit echten Texturen
-        Material tileMaterial = new Material(assetManager, "Common/MatDefs/Light/Lighting.j3md");
-        TileProviderService06.TileType type = tile.getType();
-
-        // Versuche passende Texturen zu laden basierend auf Biom-Typ
-        try {
-            String texturePath = getTextureForTileType(type);
-            if (texturePath != null) {
-                Texture texture = assetManager.loadTexture(texturePath);
-                tileMaterial.setTexture("DiffuseMap", texture);
-            } else {
-                // Fallback auf Farbe
-                ColorRGBA color = new ColorRGBA(type.getR(), type.getG(), type.getB(), 1.0f);
-                tileMaterial.setColor("Diffuse", color);
-            }
-        } catch (Exception e) {
-            // Fallback auf Farbe falls Textur nicht verfügbar
-            ColorRGBA color = new ColorRGBA(type.getR(), type.getG(), type.getB(), 1.0f);
-            tileMaterial.setColor("Diffuse", color);
-        }
-
-        ColorRGBA ambientColor = new ColorRGBA(type.getR(), type.getG(), type.getB(), 1.0f).mult(0.3f);
-        tileMaterial.setColor("Ambient", ambientColor);
-        tileMaterial.setFloat("Shininess", 10f);
-        tileGeom.setMaterial(tileMaterial);
-
-        // Schatten
-        tileGeom.setShadowMode(RenderQueue.ShadowMode.CastAndReceive);
-
-        // Positioniere das Tile in der Welt
-        Vector3f position = new Vector3f(
-                tile.getX() * tileSize,
-                0,
-                tile.getY() * tileSize
-        );
-        tileGeom.setLocalTranslation(position);
-
-        parentNode.attachChild(tileGeom);
-    }
-
-    /**
-     * Gibt den Textur-Pfad für einen bestimmten Tile-Typ zurück.
-     */
-    private String getTextureForTileType(TileProviderService06.TileType type) {
-        switch (type) {
-            case GRASS:
-                return "Textures/Terrain/splat/grass.jpg";
-            case WATER:
-                return "Textures/Effects/Splash/splash.png";
-            case SAND:
-                return "Textures/Terrain/splat/dirt.jpg";
-            case STONE:
-                return "Textures/Terrain/splat/road.jpg";
-            case SNOW:
-                return "Textures/Terrain/splat/snow.jpg";
-            case FOREST:
-                return "Textures/Terrain/splat/grass.jpg"; // Verwende Gras-Textur für Wald
-            case DESERT:
-                return "Textures/Terrain/splat/dirt.jpg"; // Verwende Dirt-Textur für Wüste
-            case SWAMP:
-                return "Textures/Terrain/splat/grass.jpg"; // Verwende Gras-Textur für Sumpf
-            default:
-                return null; // Fallback auf Farbe
-        }
-    }
-
-    /**
-     * Erstellt ein custom Mesh für ein Tile mit fließender Oberfläche.
-     */
-    private Mesh createTileMesh(TileProviderService06.Tile tile, float tileSize) {
-        Mesh mesh = new Mesh();
-
-        // Nur 4 Vertices für die Oberfläche - viel einfacher und stabiler
-        float[] vertices = new float[]{
-                // SW (Süd-West) - links unten
-                0, tile.getHeightSW(), 0,
-                // SE (Süd-Ost) - rechts unten
-                tileSize, tile.getHeightSE(), 0,
-                // NE (Nord-Ost) - rechts oben
-                tileSize, tile.getHeightNE(), tileSize,
-                // NW (Nord-West) - links oben
-                0, tile.getHeightNW(), tileSize
-        };
-
-        // Zwei Dreiecke für ein Quad - korrekte Counter-Clockwise Reihenfolge
-        int[] indices = new int[]{
-                0, 2, 1,  // Erstes Dreieck: SW -> NE -> SE
-                0, 3, 2   // Zweites Dreieck: SW -> NW -> NE
-        };
-
-        // UV-Koordinaten für die Textur
-        float[] texCoords = new float[]{
-                0, 1,  // SW
-                1, 1,  // SE
-                1, 0,  // NE
-                0, 0   // NW
-        };
-
-        // Berechne die Normale der Oberfläche basierend auf den Höhenunterschieden
-        Vector3f edge1 = new Vector3f(tileSize, tile.getHeightSE() - tile.getHeightSW(), 0);
-        Vector3f edge2 = new Vector3f(0, tile.getHeightNW() - tile.getHeightSW(), tileSize);
-        Vector3f normal = edge1.cross(edge2).normalizeLocal();
-
-        // Stelle sicher, dass die Normale nach oben zeigt
-        if (normal.y < 0) {
-            normal.negateLocal();
-        }
-
-        // Normalen für alle Vertices
-        float[] normals = new float[]{
-                normal.x, normal.y, normal.z,  // SW
-                normal.x, normal.y, normal.z,  // SE
-                normal.x, normal.y, normal.z,  // NE
-                normal.x, normal.y, normal.z   // NW
-        };
-
-        // Setze alle Buffer
-        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.Position, 3, BufferUtils.createFloatBuffer(vertices));
-        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.TexCoord, 2, BufferUtils.createFloatBuffer(texCoords));
-        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.Normal, 3, BufferUtils.createFloatBuffer(normals));
-        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.Index, 3, BufferUtils.createIntBuffer(indices));
-
-        mesh.updateBound();
-        mesh.updateCounts();
-
-        return mesh;
-    }
-
     private float getGroundHeight(Vector3f position) {
-        int chunkX = (int) Math.floor(position.x / CHUNK_SIZE);
-        int chunkY = (int) Math.floor(position.z / CHUNK_SIZE);
-
-        float localX = position.x - (chunkX * CHUNK_SIZE);
-        float localY = position.z - (chunkY * CHUNK_SIZE);
-
-        TileProviderService06.Tile[][] chunk = tileProviderService.getChunk(chunkX, chunkY);
-        if (chunk != null) {
-            int tileX = (int) Math.floor(localX);
-            int tileY = (int) Math.floor(localY);
-
-            if (tileX >= 0 && tileX < CHUNK_SIZE && tileY >= 0 && tileY < CHUNK_SIZE) {
-                TileProviderService06.Tile tile = chunk[tileX][tileY];
-                if (tile != null) {
-                    return tile.getAverageHeight() + GROUND_HEIGHT;
-                }
-            }
+        // Verwende TerrainGrid für Höhenabfrage
+        if (terrainGrid != null) {
+            float height = terrainGrid.getHeight(new Vector2f(position.x, position.z));
+            return height + GROUND_HEIGHT;
         }
-
         return GROUND_HEIGHT;
     }
 
@@ -528,14 +446,10 @@ public class HybridWorldApp06 extends SimpleApplication implements ActionListene
 
     @Override
     public void simpleUpdate(float tpf) {
-        chunkUpdateTimer += tpf;
         cloudTime += tpf;
 
-        // Prüfe regelmäßig ob neue Chunks geladen werden müssen
-        if (chunkUpdateTimer >= CHUNK_UPDATE_INTERVAL) {
-            chunkUpdateTimer = 0f;
-            updateChunks(false);
-        }
+        // TerrainGrid handhabt das Chunk-Loading automatisch!
+        // Keine manuellen updateChunks() Aufrufe mehr nötig!
 
         // Animiere Wolken
         if (cloudNode != null) {

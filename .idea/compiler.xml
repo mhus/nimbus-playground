@@ -6,8 +6,9 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
-        <module name="jmonkey-example01" />
         <module name="jmonkey-example06" />
+        <module name="jmonkey-example07" />
+        <module name="jmonkey-example01" />
         <module name="jmonkey-example04" />
         <module name="jmonkey-example05" />
         <module name="jmonkey-example02" />
