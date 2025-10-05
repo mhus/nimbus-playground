@@ -1,10 +1,18 @@
 package com.example.jme07;
 
 import com.jme3.app.SimpleApplication;
+import com.jme3.input.KeyInput;
+import com.jme3.input.MouseInput;
+import com.jme3.input.controls.ActionListener;
+import com.jme3.input.controls.AnalogListener;
+import com.jme3.input.controls.KeyTrigger;
+import com.jme3.input.controls.MouseAxisTrigger;
 import com.jme3.light.AmbientLight;
 import com.jme3.light.DirectionalLight;
 import com.jme3.material.Material;
 import com.jme3.math.ColorRGBA;
+import com.jme3.math.FastMath;
+import com.jme3.math.Quaternion;
 import com.jme3.math.Vector2f;
 import com.jme3.math.Vector3f;
 import com.jme3.scene.Node;
@@ -29,6 +37,12 @@ public class ManualTerrainGridApp extends SimpleApplication {
 
     private Vector2f lastCameraChunk = new Vector2f(Float.MAX_VALUE, Float.MAX_VALUE);
 
+    // Movement modes
+    private boolean isWalkMode = true; // Default: Walk Mode
+    private static final float GRAVITY = -30f;
+    private float verticalVelocity = 0f;
+    private static final float GROUND_OFFSET = 2.0f; // Höhe über dem Terrain
+
     @Override
     public void simpleInitApp() {
         setDisplayFps(true);
@@ -41,6 +55,7 @@ public class ManualTerrainGridApp extends SimpleApplication {
 
         initTileProvider();
         initLighting();
+        initKeys();
 
         // Kamera
         cam.setLocation(new Vector3f(64, 80, 64));
@@ -50,6 +65,7 @@ public class ManualTerrainGridApp extends SimpleApplication {
         System.out.println("\n=== ManualTerrainGridApp gestartet ===");
         System.out.println("Chunk-Größe: " + CHUNK_SIZE);
         System.out.println("Sichtweite: " + VIEW_DISTANCE + " Chunks");
+        System.out.println("Modus: WALK MODE (Drücke 'F' zum Umschalten)");
     }
 
     private void initTileProvider() {
@@ -68,20 +84,132 @@ public class ManualTerrainGridApp extends SimpleApplication {
         rootNode.addLight(sun);
     }
 
+    private void initKeys() {
+        // Toggle zwischen Walk und Flight Mode mit 'F'
+        inputManager.addMapping("ToggleMode", new KeyTrigger(KeyInput.KEY_F));
+        inputManager.addListener(actionListener, "ToggleMode");
+    }
+
+    private final ActionListener actionListener = new ActionListener() {
+        @Override
+        public void onAction(String name, boolean isPressed, float tpf) {
+            if (name.equals("ToggleMode") && isPressed) {
+                isWalkMode = !isWalkMode;
+                String mode = isWalkMode ? "WALK MODE" : "FLIGHT MODE";
+                System.out.println("Modus gewechselt zu: " + mode);
+
+                if (!isWalkMode) {
+                    // Im Flight Mode: Vertikale Geschwindigkeit zurücksetzen
+                    verticalVelocity = 0f;
+                }
+            }
+        }
+    };
+
     @Override
     public void simpleUpdate(float tpf) {
-        // Berechne aktuellen Chunk der Kamera
+        // Chunk-Management zuerst
         Vector3f camPos = cam.getLocation();
         int chunkX = (int) Math.floor(camPos.x / (CHUNK_SIZE - 1));
         int chunkZ = (int) Math.floor(camPos.z / (CHUNK_SIZE - 1));
         Vector2f currentChunk = new Vector2f(chunkX, chunkZ);
 
-        // Prüfe ob wir einen neuen Chunk betreten haben
         if (!currentChunk.equals(lastCameraChunk)) {
             System.out.println("Kamera-Chunk gewechselt: (" + chunkX + ", " + chunkZ + ")");
             updateVisibleChunks(chunkX, chunkZ);
             lastCameraChunk = currentChunk;
         }
+
+        // Walk-Modus Physik (wie in example04)
+        if (isWalkMode) {
+            camPos = cam.getLocation();
+            float terrainHeight = getTerrainHeight(camPos.x, camPos.z);
+            float groundHeight = terrainHeight + GROUND_OFFSET;
+
+            // Anwenden der Gravitation wenn über dem Boden
+            if (camPos.y > groundHeight) {
+                verticalVelocity += GRAVITY * tpf;
+            } else {
+                // Kamera ist am Boden
+                camPos.y = groundHeight;
+                verticalVelocity = 0;
+            }
+
+            // Anwenden der vertikalen Bewegung
+            if (camPos.y > groundHeight) {
+                camPos.y += verticalVelocity * tpf;
+                if (camPos.y <= groundHeight) {
+                    camPos.y = groundHeight;
+                    verticalVelocity = 0;
+                }
+            }
+
+            cam.setLocation(camPos);
+        } else {
+            // Im Flight Mode: Stelle sicher, dass wir nicht unter dem Terrain sind
+            camPos = cam.getLocation();
+            float terrainHeight = getTerrainHeight(camPos.x, camPos.z);
+            float groundHeight = terrainHeight + GROUND_OFFSET;
+
+            if (camPos.y < groundHeight) {
+                camPos.y = groundHeight;
+                cam.setLocation(camPos);
+            }
+        }
+    }
+
+    private float getTerrainHeight(float x, float z) {
+        // Berechne den Chunk, in dem sich die Position befindet
+        int chunkX = (int) Math.floor(x / (CHUNK_SIZE - 1));
+        int chunkZ = (int) Math.floor(z / (CHUNK_SIZE - 1));
+        Vector2f chunkCoord = new Vector2f(chunkX, chunkZ);
+
+        TerrainQuad terrain = loadedChunks.get(chunkCoord);
+        if (terrain != null) {
+            try {
+                // TerrainQuad.getHeight() erwartet Weltkoordinaten
+                float height = terrain.getHeight(new Vector2f(x, z));
+                // Prüfe ob gültiger Wert zurückgegeben wurde
+                if (!Float.isNaN(height) && !Float.isInfinite(height)) {
+                    return height;
+                }
+            } catch (Exception e) {
+                // Fehler beim Abrufen der Höhe, nutze Fallback
+            }
+        }
+
+        // Fallback: Berechne Höhe vom TileProvider
+        try {
+            // Lokale Position im Chunk
+            float localX = x - (chunkX * (CHUNK_SIZE - 1));
+            float localZ = z - (chunkZ * (CHUNK_SIZE - 1));
+
+            // Hole Höhendaten für diesen Chunk
+            float[] heightData = tileProvider.getHeightData(chunkX, chunkZ, CHUNK_SIZE);
+
+            // Interpoliere die Höhe
+            int ix = (int) Math.floor(localX);
+            int iz = (int) Math.floor(localZ);
+
+            if (ix >= 0 && ix < CHUNK_SIZE - 1 && iz >= 0 && iz < CHUNK_SIZE - 1) {
+                float fx = localX - ix;
+                float fz = localZ - iz;
+
+                float h00 = heightData[iz * CHUNK_SIZE + ix];
+                float h10 = heightData[iz * CHUNK_SIZE + (ix + 1)];
+                float h01 = heightData[(iz + 1) * CHUNK_SIZE + ix];
+                float h11 = heightData[(iz + 1) * CHUNK_SIZE + (ix + 1)];
+
+                float h0 = h00 * (1 - fx) + h10 * fx;
+                float h1 = h01 * (1 - fx) + h11 * fx;
+
+                return h0 * (1 - fz) + h1 * fz;
+            }
+        } catch (Exception e) {
+            // Bei Fehler: Standardhöhe zurückgeben
+        }
+
+        return 10f; // Fallback - höhere Höhe als Sicherheitsnetz
     }
 
     private void updateVisibleChunks(int centerX, int centerZ) {

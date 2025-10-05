@@ -7,7 +7,8 @@
       "Bash(bash:*)",
       "Bash(./run.sh:*)",
       "Bash(mvn compile:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Read(//Users/hummel/sources/mhus/nimbus-playground/jmonkey-example04/**)"
     ],
     "deny": [],
     "ask": []
