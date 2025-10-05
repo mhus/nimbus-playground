@@ -8,6 +8,7 @@
         <outputRelativeToContentRoot value="true" />
         <module name="jmonkey-example06" />
         <module name="jmonkey-example07" />
+        <module name="examples-bunch" />
         <module name="jmonkey-example01" />
         <module name="jmonkey-example04" />
         <module name="jmonkey-example05" />

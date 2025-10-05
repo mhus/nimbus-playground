@@ -72,20 +72,6 @@
             <version>${jme3.version}</version>
         </dependency>
 
-        <!-- JMonkeyEngine Bullet Physics -->
-        <dependency>
-            <groupId>org.jmonkeyengine</groupId>
-            <artifactId>jme3-bullet</artifactId>
-            <version>${jme3.version}</version>
-        </dependency>
-
-        <!-- JMonkeyEngine Bullet Native -->
-        <dependency>
-            <groupId>org.jmonkeyengine</groupId>
-            <artifactId>jme3-bullet-native</artifactId>
-            <version>${jme3.version}</version>
-            <scope>runtime</scope>
-        </dependency>
     </dependencies>
 
     <build>

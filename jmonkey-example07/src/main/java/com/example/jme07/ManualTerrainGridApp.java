@@ -20,6 +20,11 @@ import com.jme3.terrain.geomipmap.TerrainLodControl;
 import com.jme3.terrain.geomipmap.TerrainQuad;
 import com.jme3.terrain.geomipmap.lodcalc.DistanceLodCalculator;
 import com.jme3.texture.Texture;
+import com.jme3.texture.Texture2D;
+import com.jme3.texture.Image;
+import com.jme3.util.BufferUtils;
+
+import java.nio.ByteBuffer;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -35,7 +40,7 @@ public class ManualTerrainGridApp extends SimpleApplication {
     private Map<Vector2f, TerrainQuad> loadedChunks = new HashMap<>();
 
     private static final int CHUNK_SIZE = 65;
-    private static final int VIEW_DISTANCE = 8; // Chunks in jede Richtung (erhöht für größere Sichtweite)
+    private static final int VIEW_DISTANCE = 12; // Chunks in jede Richtung (erhöht für größere Sichtweite)
 
     private Vector2f lastCameraChunk = new Vector2f(Float.MAX_VALUE, Float.MAX_VALUE);
 
@@ -160,6 +165,96 @@ public class ManualTerrainGridApp extends SimpleApplication {
         }
     }
 
+    private Material createTerrainMaterial(float[] heightData) {
+        // Verwende Terrain Lighting Material für Texture Splatting
+        Material mat = new Material(assetManager, "Common/MatDefs/Terrain/TerrainLighting.j3md");
+
+        // Erstelle Alpha-Map basierend auf Höhen
+        // Alpha-Map bestimmt, welche Textur wo verwendet wird
+        Image alphaMap = createAlphaMap(heightData);
+        Texture2D alphaTexture = new Texture2D(alphaMap);
+        mat.setTexture("AlphaMap", alphaTexture);
+
+        // Lade und setze verschiedene Texturen (oder verwende Fallback-Farben)
+        try {
+            // Textur 1 (Rot-Kanal): Sand (niedrige Höhen)
+            Texture sand = assetManager.loadTexture("Textures/Terrain/splat/dirt.jpg");
+            sand.setWrap(Texture.WrapMode.Repeat);
+            mat.setTexture("DiffuseMap", sand);
+            mat.setFloat("DiffuseMap_0_scale", 32f);
+
+            // Textur 2 (Grün-Kanal): Gras (mittlere Höhen)
+            Texture grass = assetManager.loadTexture("Textures/Terrain/splat/grass.jpg");
+            grass.setWrap(Texture.WrapMode.Repeat);
+            mat.setTexture("DiffuseMap_1", grass);
+            mat.setFloat("DiffuseMap_1_scale", 32f);
+
+            // Textur 3 (Blau-Kanal): Stein (hohe Höhen)
+            Texture rock = assetManager.loadTexture("Textures/Terrain/splat/road.jpg");
+            rock.setWrap(Texture.WrapMode.Repeat);
+            mat.setTexture("DiffuseMap_2", rock);
+            mat.setFloat("DiffuseMap_2_scale", 64f);
+
+            mat.setFloat("Shininess", 0.0f);
+        } catch (Exception e) {
+            // Fallback: Einfaches Material mit Farbe
+            System.err.println("Texturen konnten nicht geladen werden, verwende Fallback-Material");
+            mat = new Material(assetManager, "Common/MatDefs/Light/Lighting.j3md");
+            mat.setColor("Diffuse", new ColorRGBA(0.3f, 0.7f, 0.3f, 1.0f));
+            mat.setColor("Ambient", new ColorRGBA(0.2f, 0.5f, 0.2f, 1.0f));
+        }
+
+        return mat;
+    }
+
+    private Image createAlphaMap(float[] heightData) {
+        // Alpha-Map bestimmt die Textur-Verteilung
+        // Rot-Kanal: Sand (niedrig), Grün-Kanal: Gras (mittel), Blau-Kanal: Stein (hoch)
+        int alphaMapSize = CHUNK_SIZE;
+        ByteBuffer alphaBuffer = BufferUtils.createByteBuffer(alphaMapSize * alphaMapSize * 3);
+
+        // Finde Min/Max Höhe für Normalisierung
+        float minHeight = Float.MAX_VALUE;
+        float maxHeight = Float.MIN_VALUE;
+        for (float h : heightData) {
+            minHeight = Math.min(minHeight, h);
+            maxHeight = Math.max(maxHeight, h);
+        }
+
+        float heightRange = maxHeight - minHeight;
+        if (heightRange < 1f) heightRange = 1f; // Verhindere Division durch 0
+
+        for (int i = 0; i < heightData.length; i++) {
+            float height = heightData[i];
+            float normalizedHeight = (height - minHeight) / heightRange;
+
+            byte red = 0, green = 0, blue = 0;
+
+            // Verteilung basierend auf Höhe
+            if (normalizedHeight < 0.3f) {
+                // Niedrig: Sand
+                red = (byte) 255;
+                green = 0;
+                blue = 0;
+            } else if (normalizedHeight < 0.6f) {
+                // Mittel: Gras
+                red = 0;
+                green = (byte) 255;
+                blue = 0;
+            } else {
+                // Hoch: Stein
+                red = 0;
+                green = 0;
+                blue = (byte) 255;
+            }
+
+            alphaBuffer.put(red).put(green).put(blue);
+        }
+
+        alphaBuffer.flip();
+        return new Image(Image.Format.RGB8, alphaMapSize, alphaMapSize, alphaBuffer, (com.jme3.texture.image.ColorSpace) null);
+    }
+
     private float getTerrainHeight(float x, float z) {
         // Berechne den Chunk, in dem sich die Position befindet
         int chunkX = (int) Math.floor(x / (CHUNK_SIZE - 1));
@@ -256,19 +351,8 @@ public class ManualTerrainGridApp extends SimpleApplication {
             String name = "chunk_" + chunkX + "_" + chunkZ;
             TerrainQuad terrain = new TerrainQuad(name, CHUNK_SIZE, CHUNK_SIZE, heightData);
 
-            // Material
-            Material mat = new Material(assetManager, "Common/MatDefs/Light/Lighting.j3md");
-
-            try {
-                Texture grass = assetManager.loadTexture("Textures/Terrain/splat/grass.jpg");
-                grass.setWrap(Texture.WrapMode.Repeat);
-                mat.setTexture("DiffuseMap", grass);
-                mat.setFloat("Shininess", 1f);
-            } catch (Exception e) {
-                mat.setColor("Diffuse", new ColorRGBA(0.3f, 0.7f, 0.3f, 1.0f));
-                mat.setColor("Ambient", new ColorRGBA(0.2f, 0.5f, 0.2f, 1.0f));
-            }
-
+            // Material mit Texture Splatting für verschiedene Höhenstufen
+            Material mat = createTerrainMaterial(heightData);
             terrain.setMaterial(mat);
 
             // Positioniere den Chunk in der Welt
