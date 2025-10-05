@@ -409,41 +409,55 @@ public class HybridWorldApp06 extends SimpleApplication implements ActionListene
     private Mesh createTileMesh(TileProviderService06.Tile tile, float tileSize) {
         Mesh mesh = new Mesh();
 
-        // Definiere die 8 Vertices (4 oben, 4 unten) für das Tile
+        // Nur 4 Vertices für die Oberfläche - viel einfacher und stabiler
         float[] vertices = new float[]{
-                // Boden-Vertices (Y = 0)
-                0, 0, 0,
-                tileSize, 0, 0,
-                tileSize, 0, tileSize,
-                0, 0, tileSize,
-
-                // Oberflächen-Vertices (mit Eckpunkt-Höhen)
+                // SW (Süd-West) - links unten
                 0, tile.getHeightSW(), 0,
+                // SE (Süd-Ost) - rechts unten
                 tileSize, tile.getHeightSE(), 0,
+                // NE (Nord-Ost) - rechts oben
                 tileSize, tile.getHeightNE(), tileSize,
+                // NW (Nord-West) - links oben
                 0, tile.getHeightNW(), tileSize
         };
 
-        // Definiere die Dreiecke (Faces) für das Mesh
+        // Zwei Dreiecke für ein Quad - korrekte Counter-Clockwise Reihenfolge
         int[] indices = new int[]{
-                // Oberfläche (2 Dreiecke)
-                4, 5, 6, 4, 6, 7,
-                // Seiten
-                0, 1, 5, 0, 5, 4,
-                1, 2, 6, 1, 6, 5,
-                2, 3, 7, 2, 7, 6,
-                3, 0, 4, 3, 4, 7,
-                // Boden
-                0, 2, 1, 0, 3, 2
+                0, 2, 1,  // Erstes Dreieck: SW -> NE -> SE
+                0, 3, 2   // Zweites Dreieck: SW -> NW -> NE
         };
 
-        // Setze Vertex-Daten
-        FloatBuffer vertexBuffer = BufferUtils.createFloatBuffer(vertices);
-        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.Position, 3, vertexBuffer);
+        // UV-Koordinaten für die Textur
+        float[] texCoords = new float[]{
+                0, 1,  // SW
+                1, 1,  // SE
+                1, 0,  // NE
+                0, 0   // NW
+        };
 
-        // Setze Index-Daten
-        IntBuffer indexBuffer = BufferUtils.createIntBuffer(indices);
-        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.Index, 3, indexBuffer);
+        // Berechne die Normale der Oberfläche basierend auf den Höhenunterschieden
+        Vector3f edge1 = new Vector3f(tileSize, tile.getHeightSE() - tile.getHeightSW(), 0);
+        Vector3f edge2 = new Vector3f(0, tile.getHeightNW() - tile.getHeightSW(), tileSize);
+        Vector3f normal = edge1.cross(edge2).normalizeLocal();
+
+        // Stelle sicher, dass die Normale nach oben zeigt
+        if (normal.y < 0) {
+            normal.negateLocal();
+        }
+
+        // Normalen für alle Vertices
+        float[] normals = new float[]{
+                normal.x, normal.y, normal.z,  // SW
+                normal.x, normal.y, normal.z,  // SE
+                normal.x, normal.y, normal.z,  // NE
+                normal.x, normal.y, normal.z   // NW
+        };
+
+        // Setze alle Buffer
+        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.Position, 3, BufferUtils.createFloatBuffer(vertices));
+        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.TexCoord, 2, BufferUtils.createFloatBuffer(texCoords));
+        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.Normal, 3, BufferUtils.createFloatBuffer(normals));
+        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.Index, 3, BufferUtils.createIntBuffer(indices));
 
         mesh.updateBound();
         mesh.updateCounts();
