@@ -21,6 +21,9 @@ public class BillboardSprite extends Sprite {
     private String texturePath;
     private ColorRGBA fallbackColor;
 
+    // Statischer Material-Cache (shared zwischen allen BillboardSprites)
+    private static final java.util.Map<String, Material> materialCache = new java.util.HashMap<>();
+
     public BillboardSprite(Vector3f position, String texturePath, float height, float rotation, boolean isBig) {
         super(position, height / 0.7f, rotation, isBig);  // scale = height / aspectRatio
         this.texturePath = texturePath;
@@ -43,26 +46,8 @@ public class BillboardSprite extends Sprite {
         Quad quad = new Quad(width, height);
         Geometry geom = new Geometry("billboard_" + texturePath.hashCode(), quad);
 
-        // Erstelle Material
-        Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-
-        // Lade Textur (verwende Placeholder wenn nicht vorhanden)
-        Texture tex = null;
-        try {
-            tex = assetManager.loadTexture(texturePath);
-        } catch (Exception e) {
-            // Placeholder nicht verfügbar
-        }
-
-        if (tex != null) {
-            mat.setTexture("ColorMap", tex);
-        } else {
-            mat.setColor("Color", fallbackColor);
-        }
-
-        mat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
-        mat.getAdditionalRenderState().setFaceCullMode(com.jme3.material.RenderState.FaceCullMode.Off);
-
+        // Hole oder erstelle Material (gecacht)
+        Material mat = getMaterial(assetManager);
         geom.setMaterial(mat);
 
         // Positioniere Sprite
@@ -76,5 +61,42 @@ public class BillboardSprite extends Sprite {
         geometries.add(geom);
 
         return geometries;
+    }
+
+    /**
+     * Holt oder erstellt ein Material für diesen Sprite-Typ (gecacht)
+     */
+    private Material getMaterial(AssetManager assetManager) {
+        // Cache-Key basierend auf texturePath
+        String cacheKey = texturePath;
+
+        Material mat = materialCache.get(cacheKey);
+        if (mat == null) {
+            // Erstelle neues Material
+            mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+
+            // Lade Textur (verwende Placeholder wenn nicht vorhanden)
+            Texture tex = null;
+            try {
+                tex = assetManager.loadTexture(texturePath);
+            } catch (Exception e) {
+                // Placeholder nicht verfügbar
+            }
+
+            if (tex != null) {
+                mat.setTexture("ColorMap", tex);
+            } else {
+                mat.setColor("Color", fallbackColor);
+            }
+
+            mat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
+            mat.getAdditionalRenderState().setFaceCullMode(com.jme3.material.RenderState.FaceCullMode.Off);
+
+            // Cache Material
+            materialCache.put(cacheKey, mat);
+            System.out.println("BillboardSprite Material gecacht: " + cacheKey);
+        }
+
+        return mat;
     }
 }

@@ -44,7 +44,12 @@ public class TerrainLayer extends Layer {
     private Vector2f lastCameraChunk = new Vector2f(Float.MAX_VALUE, Float.MAX_VALUE);
     private com.jme3.scene.Geometry currentTileMarker = null;
     private Vector2f lastMarkedTile = new Vector2f(Float.MAX_VALUE, Float.MAX_VALUE);
+
+    // Cache für Materialien und Texturen
     private Material waterMat;
+    private Material tileMarkerMat;
+    private Map<String, Texture> textureCache = new HashMap<>();
+    private Map<String, MaterialMapping> materialMappingCache = new HashMap<>();
 
     public TerrainLayer(AssetManager assetManager, Node rootNode, Camera cam) {
         super("TerrainLayer", assetManager, rootNode, cam);
@@ -460,11 +465,18 @@ public class TerrainLayer extends Layer {
         System.out.println("Anzahl Materialien verfügbar: " + materials.size());
         System.out.println("Anzahl Materialien geladen: " + materialMappings.size());
 
-        // Lade DiffuseMaps in den Shader
+        // Lade DiffuseMaps in den Shader (mit Texture-Cache)
         for (MaterialMapping mapping : materialMappings.values()) {
-            Texture tex = assetManager.loadTexture(mapping.getMaterial().getTexturePath());
-            tex.setWrap(Texture.WrapMode.Repeat);
-            tex.setName("DiffuseMap_" + mapping.getKey());
+            String texturePath = mapping.getMaterial().getTexturePath();
+            Texture tex = textureCache.get(texturePath);
+
+            if (tex == null) {
+                tex = assetManager.loadTexture(texturePath);
+                tex.setWrap(Texture.WrapMode.Repeat);
+                tex.setName("DiffuseMap_" + mapping.getKey());
+                textureCache.put(texturePath, tex);
+                System.out.println("  Textur geladen und gecacht: " + texturePath);
+            }
 
             mat.setTexture(mapping.getDiffuseMapParamName(), tex);
             mat.setFloat(mapping.getScaleParamName(), mapping.getMaterial().getTextureScale());
@@ -517,33 +529,39 @@ public class TerrainLayer extends Layer {
     }
 
     /**
-     * Erstellt MaterialMappings mit zugewiesenen DiffuseMap-Indizes
+     * Erstellt MaterialMappings mit zugewiesenen DiffuseMap-Indizes (mit Cache)
      */
     private Map<String, MaterialMapping> createMaterialMappings(Map<String, TerrainMaterial> materials) {
-        Map<String, MaterialMapping> mappings = new java.util.LinkedHashMap<>();
+        // Prüfe ob MaterialMappings bereits gecacht sind
+        if (materialMappingCache.isEmpty()) {
+            Map<String, MaterialMapping> mappings = new java.util.LinkedHashMap<>();
 
-        // Sortiere Materialien nach berechnetem DiffuseMap-Index
-        String[] materialKeys = materials.keySet().toArray(new String[0]);
-        java.util.Arrays.sort(materialKeys, (a, b) ->
-            materials.get(a).calculateDiffuseMapIndex() - materials.get(b).calculateDiffuseMapIndex()
-        );
+            // Sortiere Materialien nach berechnetem DiffuseMap-Index
+            String[] materialKeys = materials.keySet().toArray(new String[0]);
+            java.util.Arrays.sort(materialKeys, (a, b) ->
+                materials.get(a).calculateDiffuseMapIndex() - materials.get(b).calculateDiffuseMapIndex()
+            );
 
-        // Begrenze auf maximal 12 Materialien (TerrainLighting Maximum)
-        // Aber realistisch: 4 Materialien (erste AlphaMap hat 3, zweite hat 1)
-        int numMaterials = Math.min(12, materialKeys.length);
+            // Begrenze auf maximal 12 Materialien (TerrainLighting Maximum)
+            // Aber realistisch: 4 Materialien (erste AlphaMap hat 3, zweite hat 1)
+            int numMaterials = Math.min(12, materialKeys.length);
 
-        for (int i = 0; i < numMaterials; i++) {
-            String key = materialKeys[i];
-            TerrainMaterial material = materials.get(key);
+            for (int i = 0; i < numMaterials; i++) {
+                String key = materialKeys[i];
+                TerrainMaterial material = materials.get(key);
 
-            if (material != null && material.needsDiffuseMap()) {
-                int assignedIndex = material.calculateDiffuseMapIndex();
-                MaterialMapping mapping = new MaterialMapping(material, assignedIndex);
-                mappings.put(key, mapping);
+                if (material != null && material.needsDiffuseMap()) {
+                    int assignedIndex = material.calculateDiffuseMapIndex();
+                    MaterialMapping mapping = new MaterialMapping(material, assignedIndex);
+                    mappings.put(key, mapping);
+                }
             }
+
+            materialMappingCache.putAll(mappings);
+            System.out.println("  MaterialMappings erstellt und gecacht: " + mappings.size() + " Mappings");
         }
 
-        return mappings;
+        return materialMappingCache;
     }
 
     /**
@@ -626,14 +644,16 @@ public class TerrainLayer extends Layer {
         com.jme3.scene.shape.Quad quad = new com.jme3.scene.shape.Quad(1f, 1f);
         currentTileMarker = new com.jme3.scene.Geometry("CurrentTileOverlay", quad);
 
-        // Rotes halbtransparentes Material
-        Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-        mat.setColor("Color", new ColorRGBA(1f, 0f, 0f, 0.6f));
-        mat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
-        mat.getAdditionalRenderState().setDepthWrite(false);
-        mat.getAdditionalRenderState().setDepthTest(true);
-        mat.getAdditionalRenderState().setPolyOffset(-1f, -1f); // Verhindert Z-Fighting
-        currentTileMarker.setMaterial(mat);
+        // Rotes halbtransparentes Material (gecacht)
+        if (tileMarkerMat == null) {
+            tileMarkerMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+            tileMarkerMat.setColor("Color", new ColorRGBA(1f, 0f, 0f, 0.6f));
+            tileMarkerMat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
+            tileMarkerMat.getAdditionalRenderState().setDepthWrite(false);
+            tileMarkerMat.getAdditionalRenderState().setDepthTest(true);
+            tileMarkerMat.getAdditionalRenderState().setPolyOffset(-1f, -1f); // Verhindert Z-Fighting
+        }
+        currentTileMarker.setMaterial(tileMarkerMat);
 
         // Positioniere Quad auf dem Terrain (leicht über der Oberfläche)
         float height = getTerrainHeight(worldX + 0.5f, worldZ + 0.5f);

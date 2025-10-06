@@ -18,6 +18,9 @@ public class ModelSprite extends Sprite {
 
     private String modelPath;
 
+    // Statischer Spatial-Cache (shared zwischen allen ModelSprites)
+    private static final java.util.Map<String, Spatial> modelCache = new java.util.HashMap<>();
+
     public ModelSprite(Vector3f position, String modelPath, float height, float rotation, boolean isBig) {
         super(position, height, rotation, isBig);
         this.modelPath = modelPath;
@@ -28,13 +31,16 @@ public class ModelSprite extends Sprite {
         List<Geometry> geometries = new ArrayList<>();
 
         try {
-            // Lade 3D-Modell
-            Spatial model = assetManager.loadModel(modelPath);
+            // Lade oder hole 3D-Modell aus Cache
+            Spatial modelTemplate = getModel(assetManager);
 
-            if (model == null) {
+            if (modelTemplate == null) {
                 System.err.println("FEHLER: Modell nicht gefunden: " + modelPath);
                 return geometries;
             }
+
+            // Clone das Modell (wichtig! Sonst werden alle Instanzen verändert)
+            Spatial model = modelTemplate.clone();
 
             // Erstelle Node für dieses Modell
             Node modelNode = new Node("model_" + modelPath.hashCode());
@@ -61,6 +67,25 @@ public class ModelSprite extends Sprite {
         }
 
         return geometries;
+    }
+
+    /**
+     * Holt oder lädt ein 3D-Modell (gecacht)
+     */
+    private Spatial getModel(AssetManager assetManager) {
+        Spatial model = modelCache.get(modelPath);
+        if (model == null) {
+            try {
+                model = assetManager.loadModel(modelPath);
+                if (model != null) {
+                    modelCache.put(modelPath, model);
+                    System.out.println("ModelSprite Modell gecacht: " + modelPath);
+                }
+            } catch (Exception e) {
+                System.err.println("FEHLER beim Laden von Modell " + modelPath + ": " + e.getMessage());
+            }
+        }
+        return model;
     }
 
     /**
