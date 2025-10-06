@@ -10,7 +10,13 @@
       "Bash(cat:*)",
       "Read(//Users/hummel/sources/mhus/nimbus-playground/jmonkey-example04/**)",
       "Bash(timeout:*)",
-      "Read(//dev/**)"
+      "Read(//dev/**)",
+      "Read(//Users/hummel/.m2/repository/**)",
+      "WebFetch(domain:wiki.jmonkeyengine.org)",
+      "WebSearch",
+      "WebFetch(domain:stackoverflow.com)",
+      "WebFetch(domain:hub.jmonkeyengine.org)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []

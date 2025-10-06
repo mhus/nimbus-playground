@@ -195,50 +195,103 @@ public class TerrainLayer extends Layer {
         // Lade Texturen aus Material-Map
         Map<String, TerrainMaterial> materials = tileProvider.getMaterials();
 
-        // Erstelle dynamisches Array aus verfügbaren Materialien (max 12: 4 AlphaMaps × 3 Kanäle)
+        // WICHTIG: DiffuseMap-Index muss mit AlphaMap-Kanal übereinstimmen!
+        // Der Shader mappt automatisch:
+        //   DiffuseMap   (i=0) <-> AlphaMap Kanal R  (alphaMapIdx=0, channel=0)
+        //   DiffuseMap_1 (i=1) <-> AlphaMap Kanal G  (alphaMapIdx=0, channel=1)
+        //   DiffuseMap_2 (i=2) <-> AlphaMap Kanal B  (alphaMapIdx=0, channel=2)
+        //   DiffuseMap_3 (i=3) <-> AlphaMap_1 Kanal R (alphaMapIdx=1, channel=0)
+        //   etc.
+
+        // Sortiere Materialien nach DiffuseMap-Index (aus Material-Definition)
         String[] materialKeys = materials.keySet().toArray(new String[0]);
+        java.util.Arrays.sort(materialKeys, (a, b) ->
+            materials.get(a).getDiffuseMapIndex() - materials.get(b).getDiffuseMapIndex()
+        );
 
         // Begrenze auf maximal 4 Materialien (TerrainLighting unterstützt max 4 DiffuseMaps)
         int numMaterials = Math.min(4, materialKeys.length);
 
-        // Lade DiffuseMaps
+        System.out.println("\n========== Material-Mapping für Chunk ==========");
+        System.out.println("Anzahl Materialien verfügbar: " + materials.size());
+        System.out.println("Anzahl Materialien geladen: " + numMaterials);
+        System.out.println("Reihenfolge nach Sortierung:");
+        for (int i = 0; i < materialKeys.length; i++) {
+            TerrainMaterial tm = materials.get(materialKeys[i]);
+            System.out.println("  [" + i + "] " + materialKeys[i] + " (DiffuseIdx=" + tm.getDiffuseMapIndex() + ")");
+        }
+
+        // Lade DiffuseMaps basierend auf Material-Definition
         for (int i = 0; i < numMaterials; i++) {
             String key = materialKeys[i];
             TerrainMaterial terrainMat = materials.get(key);
 
             if (terrainMat != null) {
+                int diffuseIdx = terrainMat.getDiffuseMapIndex();
+
                 Texture tex = assetManager.loadTexture(terrainMat.getTexturePath());
                 tex.setWrap(Texture.WrapMode.Repeat);
+                tex.setName("DiffuseMap_" + key);
 
-                if (i == 0) {
-                    mat.setTexture("DiffuseMap", tex);
-                    mat.setFloat("DiffuseMap_0_scale", terrainMat.getTextureScale());
-                } else {
-                    mat.setTexture("DiffuseMap_" + i, tex);
-                    mat.setFloat("DiffuseMap_" + i + "_scale", terrainMat.getTextureScale());
-                }
+                // Shader erwartet Namen basierend auf DiffuseMapIndex:
+                // DiffuseMapIndex=0 -> "DiffuseMap"
+                // DiffuseMapIndex=1 -> "DiffuseMap_1"
+                // DiffuseMapIndex=2 -> "DiffuseMap_2"
+                // DiffuseMapIndex=3 -> "DiffuseMap_3"
+                String diffuseMapParam = (diffuseIdx == 0) ? "DiffuseMap" : "DiffuseMap_" + diffuseIdx;
+                String scaleParam = "DiffuseMap_" + diffuseIdx + "_scale";
+
+                mat.setTexture(diffuseMapParam, tex);
+                mat.setFloat(scaleParam, terrainMat.getTextureScale());
+
+                System.out.println("  " + diffuseMapParam + " = " + key +
+                    " (DiffuseIdx=" + diffuseIdx +
+                    ", AlphaMap=" + terrainMat.getAlphaMapIndex() +
+                    ", Channel=" + terrainMat.getAlphaMapChannel() + ")");
             }
         }
 
         // Erstelle AlphaMaps dynamisch basierend auf Material-Definitionen
-        // Bestimme welche AlphaMaps benötigt werden
-        int maxAlphaMapIndex = -1;
-        for (TerrainMaterial tm : materials.values()) {
-            if (tm.getAlphaMapIndex() > maxAlphaMapIndex) {
-                maxAlphaMapIndex = tm.getAlphaMapIndex();
+        // Sammle alle Materialien pro AlphaMap-Index
+        Map<Integer, List<String>> alphaMapMaterials = new java.util.HashMap<>();
+        for (int i = 0; i < numMaterials; i++) {
+            String key = materialKeys[i];
+            TerrainMaterial tm = materials.get(key);
+            int alphaMapIdx = tm.getAlphaMapIndex();
+            if (alphaMapIdx >= 0) {
+                alphaMapMaterials.computeIfAbsent(alphaMapIdx, k -> new java.util.ArrayList<>())
+                        .add(key);
             }
         }
 
-        // Erstelle benötigte AlphaMaps
-        for (int alphaMapIdx = 0; alphaMapIdx <= maxAlphaMapIndex; alphaMapIdx++) {
+        // WICHTIG: AlphaMaps müssen sequenziell sein! Wenn AlphaMap_1 verwendet wird,
+        // MUSS auch AlphaMap existieren (auch wenn leer)
+        int maxAlphaMapIdx = alphaMapMaterials.keySet().stream().max(Integer::compareTo).orElse(-1);
+
+        // Erstelle ALLE AlphaMaps von 0 bis maxAlphaMapIdx (auch leere)
+        for (int alphaMapIdx = 0; alphaMapIdx <= maxAlphaMapIdx; alphaMapIdx++) {
+            List<String> materialNames = alphaMapMaterials.get(alphaMapIdx);
+
+            if (materialNames == null) {
+                materialNames = new java.util.ArrayList<>();
+                System.out.println("  Warnung: AlphaMap " + alphaMapIdx + " ist leer (aber wird trotzdem erstellt)");
+            }
+
+            String alphaMapName = materialNames.isEmpty() ?
+                "AlphaMap_empty_" + alphaMapIdx :
+                "AlphaMap_" + String.join("_", materialNames);
+
             Texture2D alphaTex = new Texture2D(createAlphaMapFromTiles(tiles, materials, alphaMapIdx));
-            if (alphaMapIdx == 0) {
-                mat.setTexture("AlphaMap", alphaTex);
-            } else {
-                mat.setTexture("AlphaMap_" + alphaMapIdx, alphaTex);
-            }
+            alphaTex.setName(alphaMapName);
+
+            // Shader erwartet feste Namen: AlphaMap, AlphaMap_1, AlphaMap_2, AlphaMap_3
+            String alphaMapParam = (alphaMapIdx == 0) ? "AlphaMap" : "AlphaMap_" + alphaMapIdx;
+            mat.setTexture(alphaMapParam, alphaTex);
+
+            System.out.println("  " + alphaMapParam + " = [" + String.join(", ", materialNames) + "]");
         }
 
+        System.out.println("========== Ende Material-Mapping ==========\n");
         return mat;
     }
 
@@ -247,7 +300,9 @@ public class TerrainLayer extends Layer {
      */
     private Image createAlphaMapFromTiles(TerrainTile[] tiles, Map<String, TerrainMaterial> materials, int alphaMapIndex) {
         int alphaMapSize = CHUNK_SIZE;
-        ByteBuffer alphaBuffer = BufferUtils.createByteBuffer(alphaMapSize * alphaMapSize * 3);
+        ByteBuffer alphaBuffer = BufferUtils.createByteBuffer(alphaMapSize * alphaMapSize * 3); // RGB
+
+        int redCount = 0, greenCount = 0, blueCount = 0, blackCount = 0;
 
         for (TerrainTile tile : tiles) {
             String materialKey = tile.getMaterialKey();
@@ -260,15 +315,19 @@ public class TerrainLayer extends Layer {
 
             if (material != null && material.getAlphaMapIndex() == alphaMapIndex) {
                 int channel = material.getAlphaMapChannel();
-                if (channel == 0) red = 1f;       // R-Kanal
-                else if (channel == 1) green = 1f; // G-Kanal
-                else if (channel == 2) blue = 1f;  // B-Kanal
+                if (channel == 0) { red = 1f; redCount++; }       // R-Kanal
+                else if (channel == 1) { green = 1f; greenCount++; } // G-Kanal
+                else if (channel == 2) { blue = 1f; blueCount++; }  // B-Kanal
+            } else {
+                blackCount++;
             }
 
             alphaBuffer.put((byte) (red * 255));
             alphaBuffer.put((byte) (green * 255));
             alphaBuffer.put((byte) (blue * 255));
         }
+
+        System.out.println("    AlphaMap " + alphaMapIndex + " Statistik: R=" + redCount + ", G=" + greenCount + ", B=" + blueCount + ", Black=" + blackCount);
 
         alphaBuffer.flip();
         return new Image(Image.Format.RGB8, alphaMapSize, alphaMapSize, alphaBuffer, (com.jme3.texture.image.ColorSpace) null);

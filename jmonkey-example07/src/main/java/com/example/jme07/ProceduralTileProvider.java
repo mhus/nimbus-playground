@@ -24,15 +24,16 @@ public class ProceduralTileProvider implements TileProvider {
     private Map<String, TerrainMaterial> initMaterials() {
         Map<String, TerrainMaterial> mats = new LinkedHashMap<>();
 
-        // Material "sand": Sand/Dirt (niedrige Höhen) - AlphaMap 0, Kanal R
-        mats.put("sand", new TerrainMaterial("sand", "Sand", "Textures/Terrain/splat/dirt.jpg", 1f, 0, 0));
+        // Material "sand": DiffuseMap (0), AlphaMap 0 Kanal R - hell (grass Textur)
+        mats.put("sand", new TerrainMaterial("sand", "Sand", "Textures/Terrain/splat/grass.jpg", 1f, 0, 0, 0));
 
-        // Material "grass": Gras (mittlere Höhen) - AlphaMap 0, Kanal G
-        mats.put("grass", new TerrainMaterial("grass", "Grass", "Textures/Terrain/splat/grass.jpg", 1f, 0, 1));
+        // Material "grass": DiffuseMap_1 (1), AlphaMap 0 Kanal G - dunkel (Rock Textur)
+        mats.put("grass", new TerrainMaterial("grass", "Grass", "Textures/Terrain/Rock/Rock.PNG", 1f, 1, 0, 1));
 
-        // Material "rock": Stein/Fels (hohe Höhen) - AlphaMap 0, Kanal B
-        mats.put("rock", new TerrainMaterial("rock", "Rock", "Textures/Terrain/Rock/Rock.PNG", 1f, 0, 2));
+        // Material "rock": DiffuseMap_2 (2), AlphaMap 0 Kanal B - Rock
+        mats.put("rock", new TerrainMaterial("rock", "Rock", "Textures/Terrain/Rock/Rock.PNG", 1f, 2, 0, 2));
 
+        System.out.println("ProceduralTileProvider: Initialized " + mats.size() + " materials");
         return mats;
     }
 

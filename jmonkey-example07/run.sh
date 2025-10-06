@@ -2,7 +2,7 @@
 cd "$(dirname "$0")"
 
 # Kompiliere das Projekt
-mvn clean compile
+mvn clean compile || { echo "Build failed"; exit 1; }
 
 # Baue Classpath
 CP=$(mvn dependency:build-classpath -Dmdep.outputFile=/dev/stdout -q)
