@@ -10,6 +10,7 @@ import com.jme3.renderer.Camera;
 import com.jme3.scene.Geometry;
 import com.jme3.scene.Node;
 import com.jme3.scene.shape.Quad;
+import com.jme3.texture.Texture;
 
 /**
  * BackdropLayer - Erzeugt eine ferne Landschafts-Kulisse am Horizont
@@ -21,8 +22,8 @@ public class BackdropLayer {
     private Camera cam;
     private AssetManager assetManager;
 
-    private static final float BACKDROP_DISTANCE = 600f;  // Distanz der Kulisse
-    private static final float BACKDROP_HEIGHT = 300f;    // Höhe der Kulisse
+    private static final float BACKDROP_DISTANCE = 800f;  // Distanz der Kulisse (weiter weg als Nebel)
+    private static final float BACKDROP_HEIGHT = 400f;    // Höhe der Kulisse
     private static final int BACKDROP_SEGMENTS = 32;       // Anzahl der Segmente im Ring
 
     public BackdropLayer(AssetManager assetManager, Node rootNode, Camera cam) {
@@ -36,58 +37,62 @@ public class BackdropLayer {
     }
 
     private void createBackdrop() {
-        // Erstelle einen Ring von vertikalen Quads um die Szene
+        // Erstelle Berg-Silhouetten mit unregelmäßigen Höhen
         float angleStep = FastMath.TWO_PI / BACKDROP_SEGMENTS;
 
         for (int i = 0; i < BACKDROP_SEGMENTS; i++) {
             float angle = i * angleStep;
-            float nextAngle = (i + 1) * angleStep;
+            float x = FastMath.cos(angle) * BACKDROP_DISTANCE;
+            float z = FastMath.sin(angle) * BACKDROP_DISTANCE;
 
-            // Berechne Positionen für dieses Segment
-            float x1 = FastMath.cos(angle) * BACKDROP_DISTANCE;
-            float z1 = FastMath.sin(angle) * BACKDROP_DISTANCE;
-            float x2 = FastMath.cos(nextAngle) * BACKDROP_DISTANCE;
-            float z2 = FastMath.sin(nextAngle) * BACKDROP_DISTANCE;
+            // Variierende Höhe für unterschiedliche "Berge" - unregelmäßiger
+            float heightVariation = FastMath.nextRandomFloat();
+            // Perlin-ähnliche Variation für natürlichere Höhen
+            float neighborVariation = (i > 0) ? (i % 3) * 0.3f : 0;
+            float peakHeight = 150f + heightVariation * 250f + neighborVariation * 80f; // 150-480 Einheiten
 
-            // Berechne Breite des Segments
-            float width = FastMath.sqrt((x2 - x1) * (x2 - x1) + (z2 - z1) * (z2 - z1));
+            // Variierende Breite und Tiefe für natürlichere Formen
+            float widthVariation = 0.7f + FastMath.nextRandomFloat() * 0.6f; // 0.7-1.3
+            float depthVariation = 0.7f + FastMath.nextRandomFloat() * 0.6f; // 0.7-1.3
 
-            // Erstelle Quad für dieses Segment
-            Quad quad = new Quad(width, BACKDROP_HEIGHT);
-            Geometry geom = new Geometry("backdrop_" + i, quad);
+            float boxWidth = 120f * widthVariation;
+            float boxDepth = 120f * depthVariation;
 
-            // Material mit Bergsilhouetten-Farbe - dunkler für bessere Sichtbarkeit
+            // Erstelle Box als Berg mit variabler Größe
+            com.jme3.scene.shape.Box box = new com.jme3.scene.shape.Box(boxWidth, peakHeight, boxDepth);
+            Geometry geom = new Geometry("backdrop_" + i, box);
+
+            // Material - Berg-Farbe mit Höhenvariation
             Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
 
-            // Farbe variiert leicht für jeden Abschnitt (verschiedene "Berg"-Höhen)
-            float heightVariation = FastMath.nextRandomFloat() * 0.4f;
-            ColorRGBA color = new ColorRGBA(
-                0.2f + heightVariation * 0.15f,
-                0.25f + heightVariation * 0.15f,
-                0.4f + heightVariation * 0.2f,
-                1.0f  // Vollständig opak für bessere Sichtbarkeit
-            );
+            // Farbe variiert mit Höhe - höhere Berge sind etwas heller (Schnee-Effekt)
+            float heightFactor = heightVariation; // 0-1
+            float r = 0.20f + heightFactor * 0.15f; // 0.20-0.35
+            float g = 0.22f + heightFactor * 0.15f; // 0.22-0.37
+            float b = 0.30f + heightFactor * 0.20f; // 0.30-0.50
+
+            ColorRGBA color = new ColorRGBA(r, g, b, 1.0f);
             mat.setColor("Color", color);
 
             geom.setMaterial(mat);
 
-            // Positioniere und rotiere das Quad
-            Vector3f center = new Vector3f((x1 + x2) / 2, 0, (z1 + z2) / 2);
-            geom.setLocalTranslation(center);
+            // Positioniere die Box
+            // Y-Position: am "Boden" aber mit Höhenvariation für natürliches Aussehen
+            float yPos = -60f + heightVariation * 30f;
+            geom.setLocalTranslation(x, yPos, z);
 
-            // Rotiere so dass es zur Mitte zeigt
-            Vector3f direction = center.normalize();
-            float rotation = FastMath.atan2(direction.x, direction.z);
-            geom.rotate(0, rotation + FastMath.HALF_PI, 0);
+            // Kleine zufällige Rotation für mehr Variation
+            float rotVariation = (FastMath.nextRandomFloat() - 0.5f) * 0.3f; // -0.15 bis +0.15 rad
+            geom.rotate(0, rotVariation, 0);
 
-            // Verschiebe nach oben, damit es am Horizont sitzt
-            geom.move(0, -20 + heightVariation * 100, 0);
+            // Opaque Bucket für normale Sichtbarkeit
+            geom.setQueueBucket(com.jme3.renderer.queue.RenderQueue.Bucket.Opaque);
+            geom.setCullHint(com.jme3.scene.Spatial.CullHint.Never);
 
             backdropNode.attachChild(geom);
         }
 
-        // Setze Queue Bucket für richtige Render-Reihenfolge (nach Sky, vor Transparent)
-        backdropNode.setQueueBucket(com.jme3.renderer.queue.RenderQueue.Bucket.Transparent);
+        System.out.println("BackdropLayer erstellt: " + BACKDROP_SEGMENTS + " Berg-Silhouetten bei Distanz " + BACKDROP_DISTANCE);
     }
 
     /**

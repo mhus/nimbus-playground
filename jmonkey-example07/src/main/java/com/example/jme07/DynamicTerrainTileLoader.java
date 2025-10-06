@@ -50,7 +50,8 @@ public class DynamicTerrainTileLoader implements TerrainGridTileLoader {
             TerrainQuad quad = new TerrainQuad(name, patchSize, patchSize, heightData);
 
             // Setze Material
-            quad.setMaterial(terrainMaterial.clone());
+            // Original: quad.setMaterial(terrainMaterial.clone());
+            quad.setMaterial(terrainMaterial);
 
             System.out.println("Terrain-Chunk erfolgreich geladen: " + name);
             return quad;

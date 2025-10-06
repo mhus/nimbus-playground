@@ -9,7 +9,8 @@
       "Bash(mvn compile:*)",
       "Bash(cat:*)",
       "Read(//Users/hummel/sources/mhus/nimbus-playground/jmonkey-example04/**)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Read(//dev/**)"
     ],
     "deny": [],
     "ask": []
