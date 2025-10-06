@@ -25,6 +25,10 @@ public class ManualTerrainGridApp extends SimpleApplication {
     // Debug mode
     private boolean debugMode = false;
 
+    // Underwater effect
+    private boolean isUnderwater = false;
+    private com.jme3.scene.Geometry underwaterOverlay = null;
+
     // Layer System - Liste aller Layer
     private List<Layer> layers = new ArrayList<>();
     private TerrainLayer terrainLayer; // Spezielle Referenz für Terrain-Kollision
@@ -123,6 +127,10 @@ public class ManualTerrainGridApp extends SimpleApplication {
         // Hole Speed-Multiplier von der aktuellen Terrain-Position
         float speedMultiplier = terrainLayer.getSpeedMultiplier(camPos.x, camPos.z);
 
+        // Prüfe ob Kamera unter Wasser ist und update Sphere-Position
+        checkUnderwaterStatus(camPos);
+        updateUnderwaterSphere(camPos);
+
         if (isWalkMode) {
 
             flyCam.setMoveSpeed(basicWalkSpeed * speedMultiplier);
@@ -170,6 +178,60 @@ public class ManualTerrainGridApp extends SimpleApplication {
             for (com.jme3.scene.Spatial child : node.getChildren()) {
                 traverseSceneGraph(child, enableDebug);
             }
+        }
+    }
+
+    private void checkUnderwaterStatus(Vector3f camPos) {
+        // Hole Wasser-Höhe an aktueller Position
+        float waterHeight = terrainLayer.getWaterHeight(camPos.x, camPos.z);
+
+        boolean shouldBeUnderwater = waterHeight > camPos.y;
+
+        // Zustandsänderung?
+        if (shouldBeUnderwater != isUnderwater) {
+            isUnderwater = shouldBeUnderwater;
+
+            if (isUnderwater) {
+                showUnderwaterEffect();
+            } else {
+                hideUnderwaterEffect();
+            }
+        }
+    }
+
+    private void showUnderwaterEffect() {
+        if (underwaterOverlay == null) {
+            // Erstelle Sphere um die Kamera
+            com.jme3.scene.shape.Sphere sphere = new com.jme3.scene.shape.Sphere(32, 32, 5f);
+            underwaterOverlay = new com.jme3.scene.Geometry("UnderwaterSphere", sphere);
+
+            // Halbtransparentes blaues Wasser-Material (gleiche Farbe wie Wasser-Overlay)
+            com.jme3.material.Material mat = new com.jme3.material.Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+            mat.setColor("Color", new com.jme3.math.ColorRGBA(0.2f, 0.4f, 0.8f, 0.5f));
+            mat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
+            mat.getAdditionalRenderState().setDepthWrite(false);
+            mat.getAdditionalRenderState().setFaceCullMode(com.jme3.material.RenderState.FaceCullMode.Front); // Nur Innenseite rendern
+            underwaterOverlay.setMaterial(mat);
+
+            underwaterOverlay.setQueueBucket(com.jme3.renderer.queue.RenderQueue.Bucket.Transparent);
+
+            rootNode.attachChild(underwaterOverlay);
+        }
+
+        System.out.println("Underwater: ON");
+    }
+
+    private void hideUnderwaterEffect() {
+        if (underwaterOverlay != null && underwaterOverlay.getParent() != null) {
+            underwaterOverlay.removeFromParent();
+        }
+        System.out.println("Underwater: OFF");
+    }
+
+    private void updateUnderwaterSphere(Vector3f camPos) {
+        // Sphere folgt Kamera-Position wenn unter Wasser
+        if (isUnderwater && underwaterOverlay != null) {
+            underwaterOverlay.setLocalTranslation(camPos);
         }
     }
 }

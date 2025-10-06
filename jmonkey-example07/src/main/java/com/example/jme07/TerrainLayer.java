@@ -27,7 +27,9 @@ public class TerrainLayer extends Layer {
 
     private TileProvider tileProvider;
     private Node terrainNode;
+    private Node waterNode;
     private Map<Vector2f, TerrainQuad> loadedChunks = new HashMap<>();
+    private Map<Vector2f, com.jme3.scene.Geometry> loadedWaterChunks = new HashMap<>();
 
     private static final int CHUNK_SIZE = 65;
     private static final int VIEW_DISTANCE = 12;
@@ -44,6 +46,9 @@ public class TerrainLayer extends Layer {
         this.terrainNode = new Node("TerrainNode");
         rootNode.attachChild(terrainNode);
 
+        this.waterNode = new Node("WaterNode");
+        rootNode.attachChild(waterNode);
+
         initTileProvider();
         System.out.println("TerrainLayer initialisiert - Chunk-Größe: " + CHUNK_SIZE + ", Sichtweite: " + VIEW_DISTANCE);
     }
@@ -53,7 +58,7 @@ public class TerrainLayer extends Layer {
         TileProvider baseProvider = new ProceduralTileProvider(12345L, 0.02f, 40f);
 
         // Wrap mit CrossRoadTileProvider für Straßen
-        tileProvider = new CrossRoadTileProvider(baseProvider);
+        tileProvider = new CrossRoadTileProvider(new WaterTileProvider(baseProvider));
 
         System.out.println("TileProvider: " + tileProvider.getName());
     }
@@ -150,6 +155,38 @@ public class TerrainLayer extends Layer {
         return GROUND_OFFSET;
     }
 
+    public float getWaterHeight(float x, float z) {
+        // Berechne den Chunk, in dem sich die Position befindet
+        int chunkX = (int) Math.floor(x / (CHUNK_SIZE - 1));
+        int chunkZ = (int) Math.floor(z / (CHUNK_SIZE - 1));
+
+        try {
+            // Hole Tile-Daten
+            TerrainTile[] tiles = tileProvider.getTileData(chunkX, chunkZ, CHUNK_SIZE);
+
+            // Berechne lokale Koordinaten
+            float localX = x - (chunkX * (CHUNK_SIZE - 1));
+            float localZ = z - (chunkZ * (CHUNK_SIZE - 1));
+
+            int ix = (int) Math.floor(localX);
+            int iz = (int) Math.floor(localZ);
+
+            if (ix >= 0 && ix < CHUNK_SIZE && iz >= 0 && iz < CHUNK_SIZE) {
+                int index = iz * CHUNK_SIZE + ix;
+                if (index >= 0 && index < tiles.length) {
+                    TerrainTile tile = tiles[index];
+                    if (tile.hasWater() && tile.getWater() != null) {
+                        return tile.getWater().getWaterHeight();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Bei Fehler: Kein Wasser
+        }
+
+        return Float.NEGATIVE_INFINITY; // Kein Wasser an dieser Position
+    }
+
     public float getSpeedMultiplier(float x, float z) {
         // Prüfe umliegende Punkte (-1, 0, 1) und nimm den Durchschnitt
         float totalSpeed = 0f;
@@ -225,7 +262,17 @@ public class TerrainLayer extends Layer {
             return false;
         });
 
-        System.out.println("Geladene Chunks: " + loadedChunks.size());
+        // Entlade auch Wasser-Chunks
+        loadedWaterChunks.entrySet().removeIf(entry -> {
+            if (!shouldBeLoaded.containsKey(entry.getKey())) {
+                System.out.println("Entlade Wasser-Chunk: " + entry.getKey());
+                waterNode.detachChild(entry.getValue());
+                return true;
+            }
+            return false;
+        });
+
+        System.out.println("Geladene Chunks: " + loadedChunks.size() + ", Wasser-Chunks: " + loadedWaterChunks.size());
     }
 
     private void loadChunk(int chunkX, int chunkZ) {
@@ -258,12 +305,64 @@ public class TerrainLayer extends Layer {
             terrainNode.attachChild(terrain);
             loadedChunks.put(new Vector2f(chunkX, chunkZ), terrain);
 
+            // Erstelle Wasser-Overlay für diesen Chunk
+            createWaterOverlay(chunkX, chunkZ, tiles, worldX, worldZ);
+
             System.out.println("Chunk geladen: " + name + " at (" + worldX + ", 0, " + worldZ + ")");
 
         } catch (Exception e) {
             System.err.println("FEHLER beim Laden von Chunk (" + chunkX + ", " + chunkZ + "): " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    private void createWaterOverlay(int chunkX, int chunkZ, TerrainTile[] tiles, float worldX, float worldZ) {
+        // Prüfe ob überhaupt Wasser vorhanden ist
+        boolean hasAnyWater = false;
+        for (TerrainTile tile : tiles) {
+            if (tile.hasWater()) {
+                hasAnyWater = true;
+                break;
+            }
+        }
+
+        if (!hasAnyWater) {
+            return; // Kein Wasser in diesem Chunk
+        }
+
+        // Erstelle Wasser-Mesh (Quad-Plane auf Wasserhöhe)
+        // Wir erstellen eine einfache Plane die den ganzen Chunk abdeckt
+        com.jme3.scene.shape.Quad waterQuad = new com.jme3.scene.shape.Quad(CHUNK_SIZE - 1, CHUNK_SIZE - 1);
+        com.jme3.scene.Geometry waterGeom = new com.jme3.scene.Geometry("water_" + chunkX + "_" + chunkZ, waterQuad);
+
+        // Transparentes blaues Wasser-Material
+        Material waterMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        waterMat.setColor("Color", new ColorRGBA(0.2f, 0.4f, 0.8f, 0.5f)); // Halbtransparentes Blau
+        waterMat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
+        waterMat.getAdditionalRenderState().setDepthWrite(false);
+        waterMat.getAdditionalRenderState().setFaceCullMode(com.jme3.material.RenderState.FaceCullMode.Off);
+        waterGeom.setMaterial(waterMat);
+
+        // Berechne durchschnittliche Wasserhöhe für diesen Chunk
+        float avgWaterHeight = 0f;
+        int waterCount = 0;
+        for (TerrainTile tile : tiles) {
+            if (tile.hasWater() && tile.getWater() != null) {
+                avgWaterHeight += tile.getWater().getWaterHeight();
+                waterCount++;
+            }
+        }
+        avgWaterHeight = waterCount > 0 ? avgWaterHeight / waterCount : 10f;
+
+        // Positioniere Wasser-Quad
+        waterGeom.setLocalTranslation(worldX, avgWaterHeight, worldZ);
+        waterGeom.rotate(-com.jme3.math.FastMath.HALF_PI, 0, 0); // Rotiere um horizontal zu liegen
+
+        waterGeom.setQueueBucket(com.jme3.renderer.queue.RenderQueue.Bucket.Transparent);
+        waterNode.attachChild(waterGeom);
+        loadedWaterChunks.put(new Vector2f(chunkX, chunkZ), waterGeom);
+
+        System.out.println("Wasser-Overlay erstellt für Chunk (" + chunkX + ", " + chunkZ + ") bei Höhe " + avgWaterHeight);
     }
 
     private Material createTerrainMaterial(TerrainTile[] tiles) {
@@ -472,6 +571,9 @@ public class TerrainLayer extends Layer {
         }
         if (terrainNode != null && terrainNode.getParent() != null) {
             terrainNode.removeFromParent();
+        }
+        if (waterNode != null && waterNode.getParent() != null) {
+            waterNode.removeFromParent();
         }
     }
 }

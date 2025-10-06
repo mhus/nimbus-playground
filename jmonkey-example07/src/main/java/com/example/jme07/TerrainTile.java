@@ -11,6 +11,7 @@ public class TerrainTile {
     private float wetness;      // Feuchtigkeit (0-1)
     private float temperature;  // Temperatur (-1 bis 1)
     private float speedMultiplier; // Laufgeschwindigkeit (1.0 = normal, 1.5 = schneller, 0.9 = langsamer)
+    private WaterTile water;    // Wasser-Informationen (null = kein Wasser)
 
     public TerrainTile(float height, String materialKey) {
         this.height = height;
@@ -18,6 +19,7 @@ public class TerrainTile {
         this.wetness = 0.5f;
         this.temperature = 0f;
         this.speedMultiplier = 1.0f;
+        this.water = null;
     }
 
     public TerrainTile(float height, String materialKey, float wetness, float temperature) {
@@ -26,6 +28,7 @@ public class TerrainTile {
         this.wetness = wetness;
         this.temperature = temperature;
         this.speedMultiplier = 1.0f;
+        this.water = null;
     }
 
     public TerrainTile(float height, String materialKey, float wetness, float temperature, float speedMultiplier) {
@@ -34,6 +37,16 @@ public class TerrainTile {
         this.wetness = wetness;
         this.temperature = temperature;
         this.speedMultiplier = speedMultiplier;
+        this.water = null;
+    }
+
+    public TerrainTile(float height, String materialKey, float wetness, float temperature, float speedMultiplier, WaterTile water) {
+        this.height = height;
+        this.materialKey = materialKey;
+        this.wetness = wetness;
+        this.temperature = temperature;
+        this.speedMultiplier = speedMultiplier;
+        this.water = water;
     }
 
     public float getHeight() {
@@ -76,6 +89,18 @@ public class TerrainTile {
         this.speedMultiplier = speedMultiplier;
     }
 
+    public boolean hasWater() {
+        return water != null;
+    }
+
+    public WaterTile getWater() {
+        return water;
+    }
+
+    public void setWater(WaterTile water) {
+        this.water = water;
+    }
+
     @Override
     public String toString() {
         return "TerrainTile{" +
@@ -84,6 +109,7 @@ public class TerrainTile {
                 ", wetness=" + wetness +
                 ", temperature=" + temperature +
                 ", speedMultiplier=" + speedMultiplier +
+                ", water=" + water +
                 '}';
     }
 }
