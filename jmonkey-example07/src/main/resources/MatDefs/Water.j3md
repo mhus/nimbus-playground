@@ -1,0 +1,22 @@
+MaterialDef Water {
+    MaterialParameters {
+        Vector4 Color
+        Float WaveHeight : 0.5
+        Float WaveSpeed : 1.0
+        Float WaveFrequency : 0.1
+    }
+
+    Technique {
+        VertexShader GLSL150:   Shaders/Water.vert
+        FragmentShader GLSL150: Shaders/Water.frag
+
+        WorldParameters {
+            WorldViewProjectionMatrix
+            WorldMatrix
+            Time
+        }
+
+        Defines {
+        }
+    }
+}

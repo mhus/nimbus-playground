@@ -20,7 +20,8 @@
       "Bash(/dev/null)",
       "Bash(find:*)",
       "Bash(grep:*)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(xargs cat:*)"
     ],
     "deny": [],
     "ask": []

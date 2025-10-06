@@ -88,8 +88,8 @@ public class TerrainLayer extends Layer {
         // Das verhindert, dass die Kamera in Löcher fällt
         float maxHeight = Float.NEGATIVE_INFINITY;
 
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
+        for (int dx = -3; dx <= 3; dx++) {
+            for (int dz = -3; dz <= 3; dz++) {
                 float sampleX = x + dx;
                 float sampleZ = z + dz;
                 float height = getTerrainHeightAt(sampleX, sampleZ);
@@ -335,9 +335,12 @@ public class TerrainLayer extends Layer {
         com.jme3.scene.shape.Quad waterQuad = new com.jme3.scene.shape.Quad(CHUNK_SIZE - 1, CHUNK_SIZE - 1);
         com.jme3.scene.Geometry waterGeom = new com.jme3.scene.Geometry("water_" + chunkX + "_" + chunkZ, waterQuad);
 
-        // Transparentes blaues Wasser-Material
-        Material waterMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        // Wasser-Material mit animierten Wellen
+        Material waterMat = new Material(assetManager, "MatDefs/Water.j3md");
         waterMat.setColor("Color", new ColorRGBA(0.2f, 0.4f, 0.8f, 0.5f)); // Halbtransparentes Blau
+        waterMat.setFloat("WaveHeight", 0.3f);     // Höhe der Wellen
+        waterMat.setFloat("WaveSpeed", 1.0f);      // Geschwindigkeit
+        waterMat.setFloat("WaveFrequency", 0.05f); // Frequenz
         waterMat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
         waterMat.getAdditionalRenderState().setDepthWrite(false);
         waterMat.getAdditionalRenderState().setFaceCullMode(com.jme3.material.RenderState.FaceCullMode.Off);
