@@ -91,38 +91,46 @@ public class SkyLayer {
         // Erstelle einen Node für Sonne + Glow
         Node sunNode = new Node("SunNode");
 
-        // 1. Innere helle Sonne (Kern)
-        Sphere sunCore = new Sphere(32, 32, SUN_SIZE * 0.6f);
-        Geometry sunCoreGeom = new Geometry("SunCore", sunCore);
-        Material coreMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-        coreMat.setColor("Color", new ColorRGBA(10.0f, 9.5f, 7.0f, 1.0f)); // Sehr hell für Bloom!
-        coreMat.setColor("GlowColor", new ColorRGBA(10.0f, 9.5f, 7.0f, 1.0f));
-        coreMat.getAdditionalRenderState().setDepthTest(false);
-        coreMat.getAdditionalRenderState().setDepthWrite(false);
-        sunCoreGeom.setMaterial(coreMat);
-        sunNode.attachChild(sunCoreGeom);
+        // Erstelle mehrere Glow-Schichten mit abnehmender Helligkeit und zunehmender Größe
+        // für einen weichen, verlaufenden Effekt
 
-        // 2. Äußerer Glow-Ring (größer, transparenter)
-        Sphere sunGlow1 = new Sphere(32, 32, SUN_SIZE * 1.2f);
-        Geometry sunGlowGeom1 = new Geometry("SunGlow1", sunGlow1);
-        Material glowMat1 = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-        glowMat1.setColor("Color", new ColorRGBA(1.0f, 0.9f, 0.6f, 0.4f));
-        glowMat1.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
-        glowMat1.getAdditionalRenderState().setDepthTest(false);
-        glowMat1.getAdditionalRenderState().setDepthWrite(false);
-        sunGlowGeom1.setMaterial(glowMat1);
-        sunNode.attachChild(sunGlowGeom1);
+        float[] glowSizes = {1.0f, 1.3f, 1.6f, 2.0f, 2.5f, 3.2f, 4.0f};
+        float[] glowAlphas = {1.0f, 0.7f, 0.5f, 0.35f, 0.22f, 0.12f, 0.06f};
 
-        // 3. Noch größerer äußerer Glow
-        Sphere sunGlow2 = new Sphere(32, 32, SUN_SIZE * 1.8f);
-        Geometry sunGlowGeom2 = new Geometry("SunGlow2", sunGlow2);
-        Material glowMat2 = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-        glowMat2.setColor("Color", new ColorRGBA(1.0f, 0.8f, 0.5f, 0.15f));
-        glowMat2.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
-        glowMat2.getAdditionalRenderState().setDepthTest(false);
-        glowMat2.getAdditionalRenderState().setDepthWrite(false);
-        sunGlowGeom2.setMaterial(glowMat2);
-        sunNode.attachChild(sunGlowGeom2);
+        for (int i = 0; i < glowSizes.length; i++) {
+            Sphere glowSphere = new Sphere(32, 32, SUN_SIZE * glowSizes[i]);
+            Geometry glowGeom = new Geometry("SunGlow" + i, glowSphere);
+
+            Material glowMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+
+            // Farbe wird mit jeder Schicht etwas dunkler und röter
+            float colorIntensity = 1.0f - (i * 0.08f);
+            ColorRGBA color;
+            if (i == 0) {
+                // Innerer Kern - sehr hell
+                color = new ColorRGBA(10.0f, 9.5f, 7.0f, 1.0f);
+            } else {
+                // Äußere Schichten - warmes Gelb-Orange
+                color = new ColorRGBA(
+                    1.0f * colorIntensity,
+                    0.9f * colorIntensity,
+                    0.5f * colorIntensity,
+                    glowAlphas[i]
+                );
+            }
+
+            glowMat.setColor("Color", color);
+            glowMat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
+            glowMat.getAdditionalRenderState().setDepthTest(false);
+            glowMat.getAdditionalRenderState().setDepthWrite(false);
+
+            glowGeom.setMaterial(glowMat);
+            sunNode.attachChild(glowGeom);
+
+            if (i == 0) {
+                sunGeometry = glowGeom; // Für spätere Updates
+            }
+        }
 
         // Positioniere die Sonne entsprechend der Lichtrichtung
         Vector3f sunDirection = sun.getDirection().negate().normalizeLocal();
@@ -139,9 +147,8 @@ public class SkyLayer {
         sunNode.setCullHint(Spatial.CullHint.Never);
 
         rootNode.attachChild(sunNode);
-        sunGeometry = sunCoreGeom; // Für spätere Updates
 
-        System.out.println("Sun with glow layers attached to root node");
+        System.out.println("Sun with " + glowSizes.length + " glow layers attached to root node");
     }
 
     private void createSunGlow() {

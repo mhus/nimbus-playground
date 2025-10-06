@@ -22,9 +22,9 @@ public class EffectLayer {
     private ViewPort viewPort;
     private Camera cam;
 
-    private static final float FOG_DISTANCE = 600f;  // Distanz des Nebel-Rings
-    private static final float FOG_HEIGHT = 150f;     // Höhe des Nebels
-    private static final int FOG_SEGMENTS = 32;       // Anzahl der Segmente
+    private static final float FOG_DISTANCE = 1000f;  // Distanz des Nebel-Rings
+    private static final float FOG_HEIGHT = 50f;     // Höhe des Nebels
+    private static final int FOG_SEGMENTS = 0;       // Anzahl der Segmente
 
     public EffectLayer(AssetManager assetManager, ViewPort viewPort) {
         this.viewPort = viewPort;
@@ -44,54 +44,59 @@ public class EffectLayer {
     }
 
     private void createHorizonFog(AssetManager assetManager) {
-        // Erstelle einen Ring von semi-transparenten Quads am Horizont
-        float angleStep = FastMath.TWO_PI / FOG_SEGMENTS;
+        // Erstelle mehrere Ringe mit verschiedenen Höhen für dichteren Nebel
+        float[] heightLevels = {-50f, 0f, 50f, 100f};
+        float[] alphaLevels = {0.4f, 0.5f, 0.6f, 0.5f};
 
-        for (int i = 0; i < FOG_SEGMENTS; i++) {
-            float angle = i * angleStep;
-            float nextAngle = (i + 1) * angleStep;
+        for (int layer = 0; layer < heightLevels.length; layer++) {
+            float angleStep = FastMath.TWO_PI / FOG_SEGMENTS;
 
-            // Berechne Positionen für dieses Segment
-            float x1 = FastMath.cos(angle) * FOG_DISTANCE;
-            float z1 = FastMath.sin(angle) * FOG_DISTANCE;
-            float x2 = FastMath.cos(nextAngle) * FOG_DISTANCE;
-            float z2 = FastMath.sin(nextAngle) * FOG_DISTANCE;
+            for (int i = 0; i < FOG_SEGMENTS; i++) {
+                float angle = i * angleStep;
+                float nextAngle = (i + 1) * angleStep;
 
-            // Berechne Breite des Segments
-            float width = FastMath.sqrt((x2 - x1) * (x2 - x1) + (z2 - z1) * (z2 - z1));
+                // Berechne Positionen für dieses Segment
+                float x1 = FastMath.cos(angle) * FOG_DISTANCE;
+                float z1 = FastMath.sin(angle) * FOG_DISTANCE;
+                float x2 = FastMath.cos(nextAngle) * FOG_DISTANCE;
+                float z2 = FastMath.sin(nextAngle) * FOG_DISTANCE;
 
-            // Erstelle Quad für Nebel-Segment
-            Quad quad = new Quad(width, FOG_HEIGHT);
-            Geometry geom = new Geometry("fog_" + i, quad);
+                // Berechne Breite des Segments
+                float width = FastMath.sqrt((x2 - x1) * (x2 - x1) + (z2 - z1) * (z2 - z1));
 
-            // Material mit semi-transparenter Nebelfarbe
-            Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-            ColorRGBA fogColor = new ColorRGBA(0.7f, 0.8f, 0.9f, 0.3f); // Semi-transparent
-            mat.setColor("Color", fogColor);
-            mat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
-            mat.getAdditionalRenderState().setDepthWrite(false);
+                // Erstelle Quad für Nebel-Segment
+                Quad quad = new Quad(width, FOG_HEIGHT);
+                Geometry geom = new Geometry("fog_layer" + layer + "_seg" + i, quad);
 
-            geom.setMaterial(mat);
+                // Material mit semi-transparenter Nebelfarbe
+                Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+                ColorRGBA fogColor = new ColorRGBA(0.85f, 0.9f, 0.98f, alphaLevels[layer]);
+                mat.setColor("Color", fogColor);
+                mat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
+                mat.getAdditionalRenderState().setDepthWrite(false);
+                mat.getAdditionalRenderState().setDepthTest(false);
 
-            // Positioniere und rotiere das Quad
-            Vector3f center = new Vector3f((x1 + x2) / 2, 0, (z1 + z2) / 2);
-            geom.setLocalTranslation(center);
+                geom.setMaterial(mat);
 
-            // Rotiere so dass es zur Mitte zeigt
-            Vector3f direction = center.normalize();
-            float rotation = FastMath.atan2(direction.x, direction.z);
-            geom.rotate(0, rotation + FastMath.HALF_PI, 0);
+                // Positioniere und rotiere das Quad
+                Vector3f center = new Vector3f((x1 + x2) / 2, heightLevels[layer], (z1 + z2) / 2);
+                geom.setLocalTranslation(center);
 
-            // Verschiebe nach unten, damit nur der Horizont bedeckt ist
-            geom.move(0, -50, 0);
+                // Rotiere so dass es zur Mitte zeigt
+                Vector3f direction = new Vector3f(center.x, 0, center.z).normalizeLocal();
+                float rotation = FastMath.atan2(direction.x, direction.z);
+                geom.rotate(0, rotation + FastMath.HALF_PI, 0);
 
-            // Transparent bucket für korrekte Alpha-Blending Reihenfolge
-            geom.setQueueBucket(com.jme3.renderer.queue.RenderQueue.Bucket.Transparent);
+                // Transparent bucket
+                geom.setQueueBucket(com.jme3.renderer.queue.RenderQueue.Bucket.Transparent);
+                geom.setCullHint(com.jme3.scene.Spatial.CullHint.Never);
 
-            fogNode.attachChild(geom);
+                fogNode.attachChild(geom);
+            }
         }
 
-        System.out.println("Horizont-Nebel erstellt mit " + FOG_SEGMENTS + " Segmenten");
+        System.out.println("Horizont-Nebel erstellt: " + heightLevels.length + " Schichten mit je " + FOG_SEGMENTS + " Segmenten");
+        System.out.println("Nebel-Position: Distance=" + FOG_DISTANCE + ", Height=" + FOG_HEIGHT);
     }
 
     /**
