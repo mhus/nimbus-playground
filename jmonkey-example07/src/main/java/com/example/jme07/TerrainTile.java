@@ -2,25 +2,25 @@ package com.example.jme07;
 
 /**
  * TerrainTile - Repräsentiert einen einzelnen Punkt im Terrain
- * mit Höhe, Material-ID und optionalen zusätzlichen Parametern
+ * mit Höhe, Material-Key und optionalen zusätzlichen Parametern
  */
 public class TerrainTile {
 
     private float height;
-    private int materialId;
+    private String materialKey;
     private float wetness;      // Feuchtigkeit (0-1)
     private float temperature;  // Temperatur (-1 bis 1)
 
-    public TerrainTile(float height, int materialId) {
+    public TerrainTile(float height, String materialKey) {
         this.height = height;
-        this.materialId = materialId;
+        this.materialKey = materialKey;
         this.wetness = 0.5f;
         this.temperature = 0f;
     }
 
-    public TerrainTile(float height, int materialId, float wetness, float temperature) {
+    public TerrainTile(float height, String materialKey, float wetness, float temperature) {
         this.height = height;
-        this.materialId = materialId;
+        this.materialKey = materialKey;
         this.wetness = wetness;
         this.temperature = temperature;
     }
@@ -33,12 +33,12 @@ public class TerrainTile {
         this.height = height;
     }
 
-    public int getMaterialId() {
-        return materialId;
+    public String getMaterialKey() {
+        return materialKey;
     }
 
-    public void setMaterialId(int materialId) {
-        this.materialId = materialId;
+    public void setMaterialKey(String materialKey) {
+        this.materialKey = materialKey;
     }
 
     public float getWetness() {
@@ -61,7 +61,7 @@ public class TerrainTile {
     public String toString() {
         return "TerrainTile{" +
                 "height=" + height +
-                ", materialId=" + materialId +
+                ", materialKey='" + materialKey + '\'' +
                 ", wetness=" + wetness +
                 ", temperature=" + temperature +
                 '}';

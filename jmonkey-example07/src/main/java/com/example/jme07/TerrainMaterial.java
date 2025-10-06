@@ -6,20 +6,20 @@ package com.example.jme07;
  */
 public class TerrainMaterial {
 
-    private int id;
+    private String key;
     private String name;
     private String texturePath;
     private float textureScale;
 
-    public TerrainMaterial(int id, String name, String texturePath, float textureScale) {
-        this.id = id;
+    public TerrainMaterial(String key, String name, String texturePath, float textureScale) {
+        this.key = key;
         this.name = name;
         this.texturePath = texturePath;
         this.textureScale = textureScale;
     }
 
-    public int getId() {
-        return id;
+    public String getKey() {
+        return key;
     }
 
     public String getName() {
@@ -37,7 +37,7 @@ public class TerrainMaterial {
     @Override
     public String toString() {
         return "TerrainMaterial{" +
-                "id=" + id +
+                "key='" + key + '\'' +
                 ", name='" + name + '\'' +
                 ", texturePath='" + texturePath + '\'' +
                 ", textureScale=" + textureScale +

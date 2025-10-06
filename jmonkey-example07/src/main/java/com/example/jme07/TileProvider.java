@@ -1,6 +1,6 @@
 package com.example.jme07;
 
-import java.util.List;
+import java.util.Map;
 
 /**
  * Interface für dynamische Terrain-Daten-Bereitstellung.
@@ -38,9 +38,9 @@ public interface TileProvider {
     }
 
     /**
-     * Gibt die Liste aller verfügbaren Materialien zurück
+     * Gibt die Map aller verfügbaren Materialien zurück (Key -> Material)
      */
-    List<TerrainMaterial> getMaterials();
+    Map<String, TerrainMaterial> getMaterials();
 
     /**
      * Gibt den Namen des Providers zurück

@@ -1,7 +1,7 @@
 package com.example.jme07;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Prozeduraler TileProvider der Höhendaten mit Perlin-ähnlichem Noise generiert.
@@ -12,7 +12,7 @@ public class ProceduralTileProvider implements TileProvider {
     private final long seed;
     private final float scale;
     private final float heightMultiplier;
-    private final List<TerrainMaterial> materials;
+    private final Map<String, TerrainMaterial> materials;
 
     public ProceduralTileProvider(long seed, float scale, float heightMultiplier) {
         this.seed = seed;
@@ -21,17 +21,17 @@ public class ProceduralTileProvider implements TileProvider {
         this.materials = initMaterials();
     }
 
-    private List<TerrainMaterial> initMaterials() {
-        List<TerrainMaterial> mats = new ArrayList<>();
+    private Map<String, TerrainMaterial> initMaterials() {
+        Map<String, TerrainMaterial> mats = new LinkedHashMap<>();
 
-        // Material 0: Sand/Dirt (niedrige Höhen)
-        mats.add(new TerrainMaterial(0, "Sand", "Textures/Terrain/splat/dirt.jpg", 1f));
+        // Material "sand": Sand/Dirt (niedrige Höhen)
+        mats.put("sand", new TerrainMaterial("sand", "Sand", "Textures/Terrain/splat/dirt.jpg", 1f));
 
-        // Material 1: Gras (mittlere Höhen)
-        mats.add(new TerrainMaterial(1, "Grass", "Textures/Terrain/splat/grass.jpg", 1f));
+        // Material "grass": Gras (mittlere Höhen)
+        mats.put("grass", new TerrainMaterial("grass", "Grass", "Textures/Terrain/splat/grass.jpg", 1f));
 
-        // Material 2: Stein/Fels (hohe Höhen)
-        mats.add(new TerrainMaterial(2, "Rock", "Textures/Terrain/Rock/Rock.PNG", 1f));
+        // Material "rock": Stein/Fels (hohe Höhen)
+        mats.put("rock", new TerrainMaterial("rock", "Rock", "Textures/Terrain/Rock/Rock.PNG", 1f));
 
         return mats;
     }
@@ -70,13 +70,13 @@ public class ProceduralTileProvider implements TileProvider {
                 height = (height / maxValue) * heightMultiplier;
 
                 // Bestimme Material basierend auf Höhe
-                int materialId = determineMaterialId(height);
+                String materialKey = determineMaterialKey(height);
 
                 // Generiere zusätzliche Parameter
                 float wetness = (noise(worldX * 0.1f, worldZ * 0.1f) + 1f) / 2f; // 0-1
                 float temperature = noise(worldX * 0.05f + 100, worldZ * 0.05f + 100); // -1 bis 1
 
-                tiles[index] = new TerrainTile(height, materialId, wetness, temperature);
+                tiles[index] = new TerrainTile(height, materialKey, wetness, temperature);
             }
         }
 
@@ -84,23 +84,23 @@ public class ProceduralTileProvider implements TileProvider {
     }
 
     /**
-     * Bestimmt Material-ID basierend auf Höhe
+     * Bestimmt Material-Key basierend auf Höhe
      */
-    private int determineMaterialId(float height) {
+    private String determineMaterialKey(float height) {
         final float SAND_HEIGHT = 8f;
         final float GRASS_HEIGHT = 25f;
 
         if (height < SAND_HEIGHT) {
-            return 0; // Sand
+            return "sand";
         } else if (height < GRASS_HEIGHT) {
-            return 1; // Gras
+            return "grass";
         } else {
-            return 2; // Stein
+            return "rock";
         }
     }
 
     @Override
-    public List<TerrainMaterial> getMaterials() {
+    public Map<String, TerrainMaterial> getMaterials() {
         return materials;
     }
 
