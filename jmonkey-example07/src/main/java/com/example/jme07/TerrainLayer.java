@@ -31,7 +31,7 @@ public class TerrainLayer extends Layer {
 
     private static final int CHUNK_SIZE = 65;
     private static final int VIEW_DISTANCE = 12;
-    private static final float GROUND_OFFSET = 2.0f;
+    private static final float GROUND_OFFSET = 5.0f;  // Erhöht für bessere Sicht (Augenhöhe + Sicherheitsabstand)
 
     private Vector2f lastCameraChunk = new Vector2f(Float.MAX_VALUE, Float.MAX_VALUE);
 
@@ -71,6 +71,25 @@ public class TerrainLayer extends Layer {
     }
 
     public float getTerrainHeight(float x, float z) {
+        // Prüfe umliegende Punkte (-1, 0, 1) und nimm das Maximum
+        // Das verhindert, dass die Kamera in Löcher fällt
+        float maxHeight = Float.NEGATIVE_INFINITY;
+
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                float sampleX = x + dx;
+                float sampleZ = z + dz;
+                float height = getTerrainHeightAt(sampleX, sampleZ);
+                if (height > maxHeight) {
+                    maxHeight = height;
+                }
+            }
+        }
+
+        return maxHeight;
+    }
+
+    private float getTerrainHeightAt(float x, float z) {
         // Berechne den Chunk, in dem sich die Position befindet
         int chunkX = (int) Math.floor(x / (CHUNK_SIZE - 1));
         int chunkZ = (int) Math.floor(z / (CHUNK_SIZE - 1));

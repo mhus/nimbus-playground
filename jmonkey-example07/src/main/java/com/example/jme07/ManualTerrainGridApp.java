@@ -102,9 +102,9 @@ public class ManualTerrainGridApp extends SimpleApplication {
 
         // Walk-Modus Physik (wie in example04)
         Vector3f camPos = cam.getLocation();
+        float terrainHeight = terrainLayer.getTerrainHeight(camPos.x, camPos.z);
+        float groundHeight = terrainHeight + terrainLayer.getGroundOffset();
         if (isWalkMode) {
-            float terrainHeight = terrainLayer.getTerrainHeight(camPos.x, camPos.z);
-            float groundHeight = terrainHeight + terrainLayer.getGroundOffset();
 
             // Anwenden der Gravitation wenn über dem Boden
             if (camPos.y > groundHeight) {
@@ -118,17 +118,15 @@ public class ManualTerrainGridApp extends SimpleApplication {
             // Anwenden der vertikalen Bewegung
             if (camPos.y > groundHeight) {
                 camPos.y += verticalVelocity * tpf;
-                if (camPos.y <= groundHeight) {
-                    camPos.y = groundHeight;
-                    verticalVelocity = 0;
-                }
+            }
+            if (camPos.y <= groundHeight) {
+                camPos.y = groundHeight;
+                verticalVelocity = 0;
             }
 
             cam.setLocation(camPos);
         } else {
             // Im Flight Mode: Stelle sicher, dass wir nicht unter dem Terrain sind
-            float terrainHeight = terrainLayer.getTerrainHeight(camPos.x, camPos.z);
-            float groundHeight = terrainHeight + terrainLayer.getGroundOffset();
 
             if (camPos.y < groundHeight) {
                 camPos.y = groundHeight;
