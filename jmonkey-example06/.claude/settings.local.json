@@ -22,7 +22,8 @@
       "Bash(grep:*)",
       "Bash(awk:*)",
       "Bash(xargs cat:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Read(//private/tmp/**)"
     ],
     "deny": [],
     "ask": []

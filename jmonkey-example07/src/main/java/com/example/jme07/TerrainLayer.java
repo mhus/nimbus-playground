@@ -27,12 +27,16 @@ public class TerrainLayer extends Layer {
 
     private TileProvider tileProvider;
     private SpriteProvider spriteProvider;
+    private ChunkLoader chunkLoader;
     private Node terrainNode;
     private Node waterNode;
     private Node spriteNode;
     private Map<Vector2f, TerrainQuad> loadedChunks = new HashMap<>();
     private Map<Vector2f, com.jme3.scene.Geometry> loadedWaterChunks = new HashMap<>();
     private Map<Vector2f, List<com.jme3.scene.Geometry>> loadedSpriteChunks = new HashMap<>();
+
+    // Set für Chunks die gerade angefordert wurden (um Duplikate zu vermeiden)
+    private java.util.Set<Vector2f> requestedChunks = new java.util.HashSet<>();
 
     private static final int CHUNK_SIZE = 65;
     private static final int VIEW_DISTANCE = 12;
@@ -65,6 +69,7 @@ public class TerrainLayer extends Layer {
 
         initTileProvider();
         initSpriteProvider();
+        initChunkLoader();
         System.out.println("TerrainLayer initialisiert - Chunk-Größe: " + CHUNK_SIZE + ", Sichtweite: " + VIEW_DISTANCE);
     }
 
@@ -84,6 +89,12 @@ public class TerrainLayer extends Layer {
         System.out.println("SpriteProvider: " + spriteProvider.getName());
     }
 
+    private void initChunkLoader() {
+        // Erstelle ChunkLoader mit TileProvider und SpriteProvider
+        chunkLoader = new ChunkLoader(tileProvider, spriteProvider);
+        System.out.println("ChunkLoader initialisiert (Background-Thread läuft)");
+    }
+
     @Override
     public void update(float tpf) {
         // Chunk-Management
@@ -97,6 +108,9 @@ public class TerrainLayer extends Layer {
             updateVisibleChunks(chunkX, chunkZ);
             lastCameraChunk = currentChunk;
         }
+
+        // Prüfe auf fertig geladene Chunks und rendere sie
+        checkAndRenderLoadedChunks();
 
         // Aktualisiere Tile-Marker wenn aktiviert
         if (SHOW_CURRENT_TILE) {
@@ -278,7 +292,11 @@ public class TerrainLayer extends Layer {
                 }
 
                 if (!loadedChunks.containsKey(chunkCoord)) {
-                    loadChunk(x, z, centerX, centerZ);
+                    // Fordere Chunk an (falls noch nicht angefordert)
+                    if (!requestedChunks.contains(chunkCoord)) {
+                        chunkLoader.requestChunk(x, z);
+                        requestedChunks.add(chunkCoord);
+                    }
                 } else {
                     // Update Sprites wenn LOD sich geändert hat
                     updateChunkSprites(x, z, centerX, centerZ, chunkCoord);
@@ -290,6 +308,8 @@ public class TerrainLayer extends Layer {
             if (!shouldBeLoaded.containsKey(entry.getKey())) {
                 System.out.println("Entlade Chunk: " + entry.getKey());
                 terrainNode.detachChild(entry.getValue());
+                requestedChunks.remove(entry.getKey());
+                chunkLoader.unloadChunk((int)entry.getKey().x, (int)entry.getKey().y);
                 return true;
             }
             return false;
@@ -318,6 +338,128 @@ public class TerrainLayer extends Layer {
         });
 
         System.out.println("Geladene Chunks: " + loadedChunks.size() + ", Wasser-Chunks: " + loadedWaterChunks.size() + ", Sprite-Chunks: " + loadedSpriteChunks.size());
+    }
+
+    /**
+     * Prüft auf fertig geladene Chunks und rendert sie
+     */
+    private void checkAndRenderLoadedChunks() {
+        // Erstelle Kopie von requestedChunks zum Iterieren (vermeidet ConcurrentModificationException)
+        java.util.Set<Vector2f> toCheck = new java.util.HashSet<>(requestedChunks);
+
+        for (Vector2f chunkCoord : toCheck) {
+            int chunkX = (int) chunkCoord.x;
+            int chunkZ = (int) chunkCoord.y;
+
+            // Hole geladenen Chunk
+            LoadedChunk loadedChunk = chunkLoader.getLoadedChunk(chunkX, chunkZ);
+
+            if (loadedChunk != null) {
+                // Chunk ist fertig geladen -> rendere ihn
+                renderChunk(loadedChunk);
+                requestedChunks.remove(chunkCoord);
+            }
+        }
+    }
+
+    /**
+     * Rendert einen fertig geladenen Chunk
+     */
+    private void renderChunk(LoadedChunk loadedChunk) {
+        int chunkX = loadedChunk.getChunkX();
+        int chunkZ = loadedChunk.getChunkZ();
+        Vector2f chunkCoord = new Vector2f(chunkX, chunkZ);
+
+        try {
+            // Erstelle Terrain aus geladenen Tiles
+            Map<String, TerrainTile> tilesMap = loadedChunk.getTiles();
+
+            // Konvertiere Map zu Array für bestehende Methoden
+            TerrainTile[] tiles = new TerrainTile[CHUNK_SIZE * CHUNK_SIZE];
+            float[] heightData = new float[CHUNK_SIZE * CHUNK_SIZE];
+
+            for (int z = 0; z < CHUNK_SIZE; z++) {
+                for (int x = 0; x < CHUNK_SIZE; x++) {
+                    int worldX = chunkX * (CHUNK_SIZE - 1) + x;
+                    int worldZ = chunkZ * (CHUNK_SIZE - 1) + z;
+                    String key = worldX + "," + worldZ;
+
+                    TerrainTile tile = tilesMap.get(key);
+                    if (tile != null) {
+                        tiles[z * CHUNK_SIZE + x] = tile;
+                        heightData[z * CHUNK_SIZE + x] = tile.getHeight();
+                    } else {
+                        heightData[z * CHUNK_SIZE + x] = 10f;
+                    }
+                }
+            }
+
+            // Erstelle TerrainQuad
+            // TerrainQuad(name, patchSize, totalSize, heightMap)
+            // totalSize muss 2^N + 1 sein (z.B. 65, 129, 257)
+            TerrainQuad terrain = new TerrainQuad("Chunk_" + chunkX + "_" + chunkZ, 65, CHUNK_SIZE, heightData);
+            terrain.setLocalTranslation(chunkX * (CHUNK_SIZE - 1), 0, chunkZ * (CHUNK_SIZE - 1));
+
+            // Material (mit cached Textures)
+            Material mat = createTerrainMaterial(tiles);
+            terrain.setMaterial(mat);
+
+            // LOD Control
+            TerrainLodControl control = new TerrainLodControl(terrain, cam);
+            control.setLodCalculator(new DistanceLodCalculator(CHUNK_SIZE, 2.7f));
+            terrain.addControl(control);
+
+            terrainNode.attachChild(terrain);
+            loadedChunks.put(chunkCoord, terrain);
+
+            // Wasser
+            float worldX = chunkX * (CHUNK_SIZE - 1);
+            float worldZ = chunkZ * (CHUNK_SIZE - 1);
+            createWaterOverlay(chunkX, chunkZ, tiles, worldX, worldZ);
+
+            // Sprites (mit LOD)
+            Vector3f camPos = cam.getLocation();
+            int centerX = (int) Math.floor(camPos.x / (CHUNK_SIZE - 1));
+            int centerZ = (int) Math.floor(camPos.z / (CHUNK_SIZE - 1));
+            int distance = Math.max(Math.abs(chunkX - centerX), Math.abs(chunkZ - centerZ));
+
+            if (distance <= SPRITE_FAR_DISTANCE) {
+                boolean bigOnly = distance > SPRITE_NEAR_DISTANCE;
+                createSpritesFromLoadedChunk(loadedChunk, bigOnly);
+            }
+
+            System.out.println("Chunk gerendert: (" + chunkX + ", " + chunkZ + ") - " +
+                             (System.currentTimeMillis() - loadedChunk.getLoadTime()) + "ms seit Laden");
+
+        } catch (Exception e) {
+            System.err.println("FEHLER beim Rendern von Chunk (" + chunkX + ", " + chunkZ + "): " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Erstellt Sprites aus einem geladenen Chunk
+     */
+    private void createSpritesFromLoadedChunk(LoadedChunk loadedChunk, boolean bigOnly) {
+        int chunkX = loadedChunk.getChunkX();
+        int chunkZ = loadedChunk.getChunkZ();
+        Vector2f chunkCoord = new Vector2f(chunkX, chunkZ);
+
+        List<Sprite> sprites = loadedChunk.getSprites();
+        List<com.jme3.scene.Geometry> geometries = new java.util.ArrayList<>();
+
+        for (Sprite sprite : sprites) {
+            // Filtere nach bigOnly
+            if (bigOnly && !sprite.isBig()) {
+                continue;
+            }
+
+            List<com.jme3.scene.Geometry> spriteGeoms = sprite.createGeometries(assetManager, spriteNode);
+            geometries.addAll(spriteGeoms);
+        }
+
+        loadedSpriteChunks.put(chunkCoord, geometries);
+        System.out.println("Sprites gerendert für Chunk (" + chunkX + ", " + chunkZ + "): " + geometries.size() + " Geometries (bigOnly=" + bigOnly + ")");
     }
 
     private void updateChunkSprites(int chunkX, int chunkZ, int centerX, int centerZ, Vector2f chunkCoord) {
