@@ -40,12 +40,14 @@ public class CrossRoadTileProvider extends AbstractTileManipulator {
         // Kopiere Materialien vom Basis-Provider
         Map<String, TerrainMaterial> materials = new LinkedHashMap<>(baseProvider.getMaterials());
 
-        // Füge Straßen-Material hinzu
+        // Füge Straßen-Material hinzu - AlphaMap 1, Kanal R
         materials.put("road", new TerrainMaterial(
             "road",
             "Road",
             "Textures/Terrain/splat/road.jpg",
-            1f
+            1f,
+            1,
+            0
         ));
 
         return materials;

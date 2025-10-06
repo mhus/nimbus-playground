@@ -10,12 +10,21 @@ public class TerrainMaterial {
     private String name;
     private String texturePath;
     private float textureScale;
+    private int alphaMapIndex;      // Welche AlphaMap (0-3)
+    private int alphaMapChannel;    // Welcher Kanal: 0=R, 1=G, 2=B
 
     public TerrainMaterial(String key, String name, String texturePath, float textureScale) {
+        this(key, name, texturePath, textureScale, -1, -1);
+    }
+
+    public TerrainMaterial(String key, String name, String texturePath, float textureScale,
+                          int alphaMapIndex, int alphaMapChannel) {
         this.key = key;
         this.name = name;
         this.texturePath = texturePath;
         this.textureScale = textureScale;
+        this.alphaMapIndex = alphaMapIndex;
+        this.alphaMapChannel = alphaMapChannel;
     }
 
     public String getKey() {
@@ -34,6 +43,14 @@ public class TerrainMaterial {
         return textureScale;
     }
 
+    public int getAlphaMapIndex() {
+        return alphaMapIndex;
+    }
+
+    public int getAlphaMapChannel() {
+        return alphaMapChannel;
+    }
+
     @Override
     public String toString() {
         return "TerrainMaterial{" +
@@ -41,6 +58,8 @@ public class TerrainMaterial {
                 ", name='" + name + '\'' +
                 ", texturePath='" + texturePath + '\'' +
                 ", textureScale=" + textureScale +
+                ", alphaMapIndex=" + alphaMapIndex +
+                ", alphaMapChannel=" + alphaMapChannel +
                 '}';
     }
 }

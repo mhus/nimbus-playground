@@ -24,14 +24,14 @@ public class ProceduralTileProvider implements TileProvider {
     private Map<String, TerrainMaterial> initMaterials() {
         Map<String, TerrainMaterial> mats = new LinkedHashMap<>();
 
-        // Material "sand": Sand/Dirt (niedrige Höhen)
-        mats.put("sand", new TerrainMaterial("sand", "Sand", "Textures/Terrain/splat/dirt.jpg", 1f));
+        // Material "sand": Sand/Dirt (niedrige Höhen) - AlphaMap 0, Kanal R
+        mats.put("sand", new TerrainMaterial("sand", "Sand", "Textures/Terrain/splat/dirt.jpg", 1f, 0, 0));
 
-        // Material "grass": Gras (mittlere Höhen)
-        mats.put("grass", new TerrainMaterial("grass", "Grass", "Textures/Terrain/splat/grass.jpg", 1f));
+        // Material "grass": Gras (mittlere Höhen) - AlphaMap 0, Kanal G
+        mats.put("grass", new TerrainMaterial("grass", "Grass", "Textures/Terrain/splat/grass.jpg", 1f, 0, 1));
 
-        // Material "rock": Stein/Fels (hohe Höhen)
-        mats.put("rock", new TerrainMaterial("rock", "Rock", "Textures/Terrain/Rock/Rock.PNG", 1f));
+        // Material "rock": Stein/Fels (hohe Höhen) - AlphaMap 0, Kanal B
+        mats.put("rock", new TerrainMaterial("rock", "Rock", "Textures/Terrain/Rock/Rock.PNG", 1f, 0, 2));
 
         return mats;
     }

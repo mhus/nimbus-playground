@@ -195,12 +195,14 @@ public class TerrainLayer extends Layer {
         // Lade Texturen aus Material-Map
         Map<String, TerrainMaterial> materials = tileProvider.getMaterials();
 
-        // Definiere feste Reihenfolge für bis zu 4 Materialien
-        // AlphaMap 1 (RGB): sand, grass, rock
-        // AlphaMap 2 (R): road
-        String[] materialKeys = {"sand", "grass", "rock", "road"};
+        // Erstelle dynamisches Array aus verfügbaren Materialien (max 12: 4 AlphaMaps × 3 Kanäle)
+        String[] materialKeys = materials.keySet().toArray(new String[0]);
 
-        for (int i = 0; i < Math.min(4, materialKeys.length); i++) {
+        // Begrenze auf maximal 4 Materialien (TerrainLighting unterstützt max 4 DiffuseMaps)
+        int numMaterials = Math.min(4, materialKeys.length);
+
+        // Lade DiffuseMaps
+        for (int i = 0; i < numMaterials; i++) {
             String key = materialKeys[i];
             TerrainMaterial terrainMat = materials.get(key);
 
@@ -218,67 +220,54 @@ public class TerrainLayer extends Layer {
             }
         }
 
-        // Erstelle AlphaMaps basierend auf Material-Keys aus Tiles
-        // AlphaMap 1: RGB für erste 3 Materialien
-        Texture2D alphaMap1 = new Texture2D(createAlphaMap1FromTiles(tiles, materialKeys));
-        mat.setTexture("AlphaMap", alphaMap1);
+        // Erstelle AlphaMaps dynamisch basierend auf Material-Definitionen
+        // Bestimme welche AlphaMaps benötigt werden
+        int maxAlphaMapIndex = -1;
+        for (TerrainMaterial tm : materials.values()) {
+            if (tm.getAlphaMapIndex() > maxAlphaMapIndex) {
+                maxAlphaMapIndex = tm.getAlphaMapIndex();
+            }
+        }
 
-        // AlphaMap 2: R für 4. Material (road)
-        if (materials.containsKey("road")) {
-            Texture2D alphaMap2 = new Texture2D(createAlphaMap2FromTiles(tiles, materialKeys));
-            mat.setTexture("AlphaMap_1", alphaMap2);
+        // Erstelle benötigte AlphaMaps
+        for (int alphaMapIdx = 0; alphaMapIdx <= maxAlphaMapIndex; alphaMapIdx++) {
+            Texture2D alphaTex = new Texture2D(createAlphaMapFromTiles(tiles, materials, alphaMapIdx));
+            if (alphaMapIdx == 0) {
+                mat.setTexture("AlphaMap", alphaTex);
+            } else {
+                mat.setTexture("AlphaMap_" + alphaMapIdx, alphaTex);
+            }
         }
 
         return mat;
     }
 
     /**
-     * Erstellt AlphaMap 1 für die ersten 3 Materialien (RGB)
+     * Erstellt eine AlphaMap für einen bestimmten Index basierend auf Material-Definitionen
      */
-    private Image createAlphaMap1FromTiles(TerrainTile[] tiles, String[] materialKeys) {
+    private Image createAlphaMapFromTiles(TerrainTile[] tiles, Map<String, TerrainMaterial> materials, int alphaMapIndex) {
         int alphaMapSize = CHUNK_SIZE;
         ByteBuffer alphaBuffer = BufferUtils.createByteBuffer(alphaMapSize * alphaMapSize * 3);
 
-        for (int i = 0; i < tiles.length; i++) {
-            TerrainTile tile = tiles[i];
+        for (TerrainTile tile : tiles) {
             String materialKey = tile.getMaterialKey();
+            TerrainMaterial material = materials.get(materialKey);
 
-            // AlphaMap 1: RGB für erste 3 Materialien
-            // materialKeys[0] (sand) = Rot, materialKeys[1] (grass) = Grün, materialKeys[2] (rock) = Blau
-            float mat0 = materialKey.equals(materialKeys[0]) ? 1f : 0f;
-            float mat1 = materialKey.equals(materialKeys[1]) ? 1f : 0f;
-            float mat2 = materialKey.equals(materialKeys[2]) ? 1f : 0f;
+            // Bestimme RGB-Werte basierend auf Material-Definition
+            float red = 0f;
+            float green = 0f;
+            float blue = 0f;
 
-            byte red = (byte) (mat0 * 255);
-            byte green = (byte) (mat1 * 255);
-            byte blue = (byte) (mat2 * 255);
+            if (material != null && material.getAlphaMapIndex() == alphaMapIndex) {
+                int channel = material.getAlphaMapChannel();
+                if (channel == 0) red = 1f;       // R-Kanal
+                else if (channel == 1) green = 1f; // G-Kanal
+                else if (channel == 2) blue = 1f;  // B-Kanal
+            }
 
-            alphaBuffer.put(red).put(green).put(blue);
-        }
-
-        alphaBuffer.flip();
-        return new Image(Image.Format.RGB8, alphaMapSize, alphaMapSize, alphaBuffer, (com.jme3.texture.image.ColorSpace) null);
-    }
-
-    /**
-     * Erstellt AlphaMap 2 für das 4. Material (R-Kanal)
-     */
-    private Image createAlphaMap2FromTiles(TerrainTile[] tiles, String[] materialKeys) {
-        int alphaMapSize = CHUNK_SIZE;
-        ByteBuffer alphaBuffer = BufferUtils.createByteBuffer(alphaMapSize * alphaMapSize * 3);
-
-        for (int i = 0; i < tiles.length; i++) {
-            TerrainTile tile = tiles[i];
-            String materialKey = tile.getMaterialKey();
-
-            // AlphaMap 2: R für 4. Material (road)
-            float mat3 = materialKey.equals(materialKeys[3]) ? 1f : 0f;
-
-            byte red = (byte) (mat3 * 255);
-            byte green = 0;
-            byte blue = 0;
-
-            alphaBuffer.put(red).put(green).put(blue);
+            alphaBuffer.put((byte) (red * 255));
+            alphaBuffer.put((byte) (green * 255));
+            alphaBuffer.put((byte) (blue * 255));
         }
 
         alphaBuffer.flip();
