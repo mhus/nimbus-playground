@@ -17,7 +17,7 @@ public interface SpriteProvider {
      * @param chunkSize Größe des Chunks
      * @return Liste von Sprites in diesem Chunk
      */
-    List<Sprite> getSprites(int chunkX, int chunkZ, int chunkSize, TerrainTile[] tiles, boolean bigOnly);
+    List<Sprite> getSprites(int chunkX, int chunkZ, int chunkSize, TerrainTile[] tiles);
 
     /**
      * Gibt den Namen des Providers zurück

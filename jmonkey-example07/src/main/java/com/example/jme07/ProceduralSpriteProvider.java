@@ -29,7 +29,7 @@ public class ProceduralSpriteProvider implements SpriteProvider {
     }
 
     @Override
-    public List<Sprite> getSprites(int chunkX, int chunkZ, int chunkSize, TerrainTile[] tiles, boolean bigOnly) {
+    public List<Sprite> getSprites(int chunkX, int chunkZ, int chunkSize, TerrainTile[] tiles) {
         List<Sprite> sprites = new ArrayList<>();
 
         // Deterministischer Random basierend auf Chunk-Koordinaten
@@ -37,11 +37,9 @@ public class ProceduralSpriteProvider implements SpriteProvider {
 
         // Generiere Sprites basierend auf Terrain
         generateTreeSprites(sprites, random, tiles, chunkX, chunkZ, chunkSize);
-        if (!bigOnly)
-            generateBushSprites(sprites, random, tiles, chunkX, chunkZ, chunkSize);
+        generateBushSprites(sprites, random, tiles, chunkX, chunkZ, chunkSize);
         generateRockSprites(sprites, random, tiles, chunkX, chunkZ, chunkSize);
-        if (!bigOnly)
-            generateGrassSprites(sprites, random, tiles, chunkX, chunkZ, chunkSize);
+        generateGrassSprites(sprites, random, tiles, chunkX, chunkZ, chunkSize);
 
         // Generiere 3D Model Sprites (immer, auch bei bigOnly)
         generateModelSprites(sprites, random, tiles, chunkX, chunkZ, chunkSize);

@@ -121,7 +121,7 @@ public class ManualTerrainGridApp extends SimpleApplication {
 
         // Walk-Modus Physik (wie in example04)
         Vector3f camPos = cam.getLocation();
-        float terrainHeight = terrainLayer.getTerrainHeight(camPos.x, camPos.z);
+        float terrainHeight = terrainLayer.getTerrainHeightAtRange(camPos.x, camPos.z, 3);
         float groundHeight = terrainHeight + terrainLayer.getGroundOffset();
 
         // Hole Speed-Multiplier von der aktuellen Terrain-Position

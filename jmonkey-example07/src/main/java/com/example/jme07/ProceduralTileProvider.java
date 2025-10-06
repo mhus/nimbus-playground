@@ -12,12 +12,14 @@ public class ProceduralTileProvider implements TileProvider {
     private final long seed;
     private final float scale;
     private final float heightMultiplier;
+    private final float heightOffset;  // Offset um Höhen positiv zu machen
     private final Map<String, TerrainMaterial> materials;
 
     public ProceduralTileProvider(long seed, float scale, float heightMultiplier) {
         this.seed = seed;
         this.scale = scale;
         this.heightMultiplier = heightMultiplier;
+        this.heightOffset = heightMultiplier + 10f;  // Offset = heightMultiplier + 10 für positive Werte
         this.materials = initMaterials();
     }
 
@@ -67,11 +69,12 @@ public class ProceduralTileProvider implements TileProvider {
                     frequency *= 2.0f;
                 }
 
-                // Normalisiere und skaliere
-                height = (height / maxValue) * heightMultiplier;
+                // Normalisiere und skaliere, dann füge Offset hinzu für positive Werte
+                height = (height / maxValue) * heightMultiplier + heightOffset;
 
-                // Bestimme Material basierend auf Höhe
-                String materialKey = determineMaterialKey(height);
+                // Bestimme Material basierend auf Höhe (ohne Offset für Material-Bestimmung)
+                float relativeHeight = height - heightOffset;
+                String materialKey = determineMaterialKey(relativeHeight);
 
                 // Generiere zusätzliche Parameter
                 float wetness = (noise(worldX * 0.1f, worldZ * 0.1f) + 1f) / 2f; // 0-1
@@ -128,18 +131,48 @@ public class ProceduralTileProvider implements TileProvider {
     }
 
     /**
-     * Einfache Noise-Funktion basierend auf Sinuswellen.
-     * Für Produktionsumgebungen sollte eine echte Perlin/Simplex Noise-Implementierung verwendet werden.
+     * Hash-basierte Noise-Funktion für konsistente Werte bei beliebigen Koordinaten.
+     * Vermeidet Drift-Probleme der vorherigen Sinus-basierten Implementierung.
      */
     private float noise(float x, float z) {
-        // Kombiniere mehrere Sinuswellen für pseudo-zufälliges Pattern
-        float n = (float) (
-            Math.sin(x * 0.75 + seed) * Math.cos(z * 0.75 - seed) +
-            Math.sin(x * 1.2 - z * 0.8 + seed) * 0.5 +
-            Math.cos(x * 0.3 + z * 1.1 - seed) * 0.3
-        );
+        // Diskretisiere Koordinaten auf Grid
+        int ix = (int) Math.floor(x);
+        int iz = (int) Math.floor(z);
+
+        // Fraktionale Teile für Interpolation
+        float fx = x - ix;
+        float fz = z - iz;
+
+        // Smooth interpolation (Fade-Funktion)
+        fx = fx * fx * (3.0f - 2.0f * fx);
+        fz = fz * fz * (3.0f - 2.0f * fz);
+
+        // Hole Hash-Werte für die 4 Eckpunkte
+        float h00 = hash(ix, iz);
+        float h10 = hash(ix + 1, iz);
+        float h01 = hash(ix, iz + 1);
+        float h11 = hash(ix + 1, iz + 1);
+
+        // Bilineare Interpolation
+        float h0 = h00 * (1.0f - fx) + h10 * fx;
+        float h1 = h01 * (1.0f - fx) + h11 * fx;
+
+        return h0 * (1.0f - fz) + h1 * fz;
+    }
+
+    /**
+     * Hash-Funktion für Integer-Koordinaten
+     * Gibt konsistente Pseudo-Zufallswerte im Bereich [-1, 1] zurück
+     */
+    private float hash(int x, int z) {
+        // Kombiniere mit seed
+        int n = x + z * 57 + (int)(seed & 0xFFFFFF);
+
+        // Integer-Hash (basierend auf bit-mixing)
+        n = (n << 13) ^ n;
+        n = (n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff;
 
         // Normalisiere zu [-1, 1]
-        return Math.max(-1.0f, Math.min(1.0f, n));
+        return 1.0f - (n / 1073741824.0f);
     }
 }

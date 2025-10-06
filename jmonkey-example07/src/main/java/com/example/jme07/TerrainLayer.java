@@ -35,6 +35,9 @@ public class TerrainLayer extends Layer {
     private Map<Vector2f, com.jme3.scene.Geometry> loadedWaterChunks = new HashMap<>();
     private Map<Vector2f, List<com.jme3.scene.Geometry>> loadedSpriteChunks = new HashMap<>();
 
+    // Cache für Höhendaten (unabhängig vom Rendering)
+    private Map<Vector2f, float[]> heightDataCache = new HashMap<>();
+
     // Set für Chunks die gerade angefordert wurden (um Duplikate zu vermeiden)
     private java.util.Set<Vector2f> requestedChunks = new java.util.HashSet<>();
 
@@ -118,13 +121,13 @@ public class TerrainLayer extends Layer {
         }
     }
 
-    public float getTerrainHeight(float x, float z) {
+    public float getTerrainHeightAtRange(float x, float z, int range) {
         // Prüfe umliegende Punkte (-1, 0, 1) und nimm das Maximum
         // Das verhindert, dass die Kamera in Löcher fällt
         float maxHeight = Float.NEGATIVE_INFINITY;
 
-        for (int dx = -3; dx <= 3; dx++) {
-            for (int dz = -3; dz <= 3; dz++) {
+        for (int dx = -range; dx <= range; dx++) {
+            for (int dz = -range; dz <= range; dz++) {
                 float sampleX = x + dx;
                 float sampleZ = z + dz;
                 float height = getTerrainHeightAt(sampleX, sampleZ);
@@ -137,12 +140,13 @@ public class TerrainLayer extends Layer {
         return maxHeight;
     }
 
-    private float getTerrainHeightAt(float x, float z) {
+    public float getTerrainHeightAt(float x, float z) {
         // Berechne den Chunk, in dem sich die Position befindet
         int chunkX = (int) Math.floor(x / (CHUNK_SIZE - 1));
         int chunkZ = (int) Math.floor(z / (CHUNK_SIZE - 1));
         Vector2f chunkCoord = new Vector2f(chunkX, chunkZ);
 
+        // Versuche zuerst vom gerenderten TerrainQuad zu holen
         TerrainQuad terrain = loadedChunks.get(chunkCoord);
         if (terrain != null) {
             try {
@@ -155,34 +159,62 @@ public class TerrainLayer extends Layer {
             }
         }
 
-        // Fallback: Berechne Höhe vom TileProvider
+        // Versuche aus Height-Cache zu holen (schneller als TileProvider)
+        float[] cachedHeights = heightDataCache.get(chunkCoord);
+        if (cachedHeights != null) {
+            try {
+                float localX = x - (chunkX * (CHUNK_SIZE - 1));
+                float localZ = z - (chunkZ * (CHUNK_SIZE - 1));
+
+                int ix = (int) Math.floor(localX);
+                int iz = (int) Math.floor(localZ);
+
+                // Clamp auf gültigen Bereich
+                if (ix < 0) ix = 0;
+                if (ix >= CHUNK_SIZE) ix = CHUNK_SIZE - 1;
+                if (iz < 0) iz = 0;
+                if (iz >= CHUNK_SIZE) iz = CHUNK_SIZE - 1;
+
+                int index = iz * CHUNK_SIZE + ix;
+                if (index < cachedHeights.length) {
+                    return cachedHeights[index];
+                }
+            } catch (Exception e) {
+                // Fehler beim Cache-Zugriff, nutze TileProvider
+            }
+        }
+
+        System.out.println("++++++++++++++++ OHHH NOOOO %d0 %d0".formatted(chunkX, chunkZ));
+        // Fallback: Berechne Höhe direkt vom TileProvider (auch für noch nicht gerenderte Chunks)
         try {
+            // Lokale Koordinaten im Chunk
             float localX = x - (chunkX * (CHUNK_SIZE - 1));
             float localZ = z - (chunkZ * (CHUNK_SIZE - 1));
 
-            float[] heightData = tileProvider.getHeightData(chunkX, chunkZ, CHUNK_SIZE);
+            // Hole Tile-Daten vom Provider
+            TerrainTile[] tiles = tileProvider.getTileData(chunkX, chunkZ, CHUNK_SIZE);
 
+            // Berechne Array-Index (clamped auf gültigen Bereich)
             int ix = (int) Math.floor(localX);
             int iz = (int) Math.floor(localZ);
 
-            if (ix >= 0 && ix < CHUNK_SIZE - 1 && iz >= 0 && iz < CHUNK_SIZE - 1) {
-                float fx = localX - ix;
-                float fz = localZ - iz;
+            // Clamp auf gültigen Bereich
+            if (ix < 0) ix = 0;
+            if (ix >= CHUNK_SIZE) ix = CHUNK_SIZE - 1;
+            if (iz < 0) iz = 0;
+            if (iz >= CHUNK_SIZE) iz = CHUNK_SIZE - 1;
 
-                float h00 = heightData[iz * CHUNK_SIZE + ix];
-                float h10 = heightData[iz * CHUNK_SIZE + (ix + 1)];
-                float h01 = heightData[(iz + 1) * CHUNK_SIZE + ix];
-                float h11 = heightData[(iz + 1) * CHUNK_SIZE + (ix + 1)];
-
-                float h0 = h00 * (1 - fx) + h10 * fx;
-                float h1 = h01 * (1 - fx) + h11 * fx;
-
-                return h0 * (1 - fz) + h1 * fz;
+            // Hole direkt die Höhe vom Tile
+            int index = iz * CHUNK_SIZE + ix;
+            if (index >= 0 && index < tiles.length) {
+                return tiles[index].getHeight();
             }
         } catch (Exception e) {
             // Bei Fehler: Standardhöhe zurückgeben
+            System.err.println("FEHLER in getTerrainHeightAt(" + x + ", " + z + "): " + e.getMessage());
         }
 
+        System.out.println("++++++++++++++++ RETURN 10f");
         return 10f;
     }
 
@@ -309,6 +341,7 @@ public class TerrainLayer extends Layer {
                 System.out.println("Entlade Chunk: " + entry.getKey());
                 terrainNode.detachChild(entry.getValue());
                 requestedChunks.remove(entry.getKey());
+                heightDataCache.remove(entry.getKey());  // Entferne auch aus Height-Cache
                 chunkLoader.unloadChunk((int)entry.getKey().x, (int)entry.getKey().y);
                 return true;
             }
@@ -411,6 +444,9 @@ public class TerrainLayer extends Layer {
 
             terrainNode.attachChild(terrain);
             loadedChunks.put(chunkCoord, terrain);
+
+            // Speichere Höhendaten im Cache
+            heightDataCache.put(chunkCoord, heightData);
 
             // Wasser
             float worldX = chunkX * (CHUNK_SIZE - 1);
@@ -798,7 +834,7 @@ public class TerrainLayer extends Layer {
         currentTileMarker.setMaterial(tileMarkerMat);
 
         // Positioniere Quad auf dem Terrain (leicht über der Oberfläche)
-        float height = getTerrainHeight(worldX + 0.5f, worldZ + 0.5f);
+        float height = getTerrainHeightAt(worldX + 0.5f, worldZ + 0.5f);
         currentTileMarker.setLocalTranslation(worldX, height + 0.05f, worldZ);
 
         // Rotiere Quad um 90° damit es flach auf dem Boden liegt
@@ -809,7 +845,7 @@ public class TerrainLayer extends Layer {
     }
 
     private void createSpriteOverlay(int chunkX, int chunkZ, TerrainTile[] tiles, boolean bigOnly) {
-        List<Sprite> sprites = spriteProvider.getSprites(chunkX, chunkZ, CHUNK_SIZE, tiles, bigOnly);
+        List<Sprite> sprites = spriteProvider.getSprites(chunkX, chunkZ, CHUNK_SIZE, tiles);
 
         if (sprites.isEmpty()) {
             return;
@@ -819,8 +855,10 @@ public class TerrainLayer extends Layer {
 
         // Jeder Sprite rendert sich selbst
         for (Sprite sprite : sprites) {
-            List<com.jme3.scene.Geometry> geoms = sprite.createGeometries(assetManager, spriteNode);
-            spriteGeometries.addAll(geoms);
+//            if (!bigOnly || sprite.isBig()) {
+                List<com.jme3.scene.Geometry> geoms = sprite.createGeometries(assetManager, spriteNode);
+                spriteGeometries.addAll(geoms);
+//            }
         }
 
         loadedSpriteChunks.put(new Vector2f(chunkX, chunkZ), spriteGeometries);

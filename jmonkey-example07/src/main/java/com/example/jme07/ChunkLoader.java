@@ -126,7 +126,7 @@ public class ChunkLoader {
             }
 
             // Lade Sprites (alle Sprites, bigOnly=false im Background)
-            List<Sprite> sprites = spriteProvider.getSprites(chunkX, chunkZ, 65, tileArray, false);
+            List<Sprite> sprites = spriteProvider.getSprites(chunkX, chunkZ, 65, tileArray);
 
             // Erstelle LoadedChunk
             LoadedChunk chunk = new LoadedChunk(chunkX, chunkZ, tiles, sprites);
