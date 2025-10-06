@@ -36,6 +36,8 @@ public class TerrainLayer extends Layer {
 
     private static final int CHUNK_SIZE = 65;
     private static final int VIEW_DISTANCE = 12;
+    private static final int SPRITE_NEAR_DISTANCE = 4;   // Volle Sprites (alle Typen)
+    private static final int SPRITE_FAR_DISTANCE = 8;    // Nur große Sprites (Bäume, Steine)
     private static final float GROUND_OFFSET = 5.0f;  // Erhöht für bessere Sicht (Augenhöhe + Sicherheitsabstand)
     private static final boolean SHOW_CURRENT_TILE = true;  // true = zeigt aktuelle Tile rot an
 
@@ -254,14 +256,26 @@ public class TerrainLayer extends Layer {
         System.out.println("Aktualisiere sichtbare Chunks um (" + centerX + ", " + centerZ + ")");
 
         Map<Vector2f, Boolean> shouldBeLoaded = new HashMap<>();
+        Map<Vector2f, Boolean> shouldHaveSprites = new HashMap<>();
 
         for (int x = centerX - VIEW_DISTANCE; x <= centerX + VIEW_DISTANCE; x++) {
             for (int z = centerZ - VIEW_DISTANCE; z <= centerZ + VIEW_DISTANCE; z++) {
                 Vector2f chunkCoord = new Vector2f(x, z);
                 shouldBeLoaded.put(chunkCoord, true);
 
+                // Berechne Distanz zum Kamera-Chunk
+                int distance = Math.max(Math.abs(x - centerX), Math.abs(z - centerZ));
+
+                // Entscheide ob und welche Sprites geladen werden sollen
+                if (distance <= SPRITE_FAR_DISTANCE) {
+                    shouldHaveSprites.put(chunkCoord, true);
+                }
+
                 if (!loadedChunks.containsKey(chunkCoord)) {
-                    loadChunk(x, z);
+                    loadChunk(x, z, centerX, centerZ);
+                } else {
+                    // Update Sprites wenn LOD sich geändert hat
+                    updateChunkSprites(x, z, centerX, centerZ, chunkCoord);
                 }
             }
         }
@@ -285,9 +299,9 @@ public class TerrainLayer extends Layer {
             return false;
         });
 
-        // Entlade Sprite-Chunks
+        // Entlade Sprite-Chunks die außerhalb der Sprite-Distanz sind
         loadedSpriteChunks.entrySet().removeIf(entry -> {
-            if (!shouldBeLoaded.containsKey(entry.getKey())) {
+            if (!shouldHaveSprites.containsKey(entry.getKey())) {
                 System.out.println("Entlade Sprite-Chunk: " + entry.getKey());
                 for (com.jme3.scene.Geometry sprite : entry.getValue()) {
                     spriteNode.detachChild(sprite);
@@ -300,7 +314,34 @@ public class TerrainLayer extends Layer {
         System.out.println("Geladene Chunks: " + loadedChunks.size() + ", Wasser-Chunks: " + loadedWaterChunks.size() + ", Sprite-Chunks: " + loadedSpriteChunks.size());
     }
 
-    private void loadChunk(int chunkX, int chunkZ) {
+    private void updateChunkSprites(int chunkX, int chunkZ, int centerX, int centerZ, Vector2f chunkCoord) {
+        int distance = Math.max(Math.abs(chunkX - centerX), Math.abs(chunkZ - centerZ));
+
+        // Bestimme ob Sprites geladen sein sollten und welche LOD-Stufe
+        boolean shouldHaveSprites = distance <= SPRITE_FAR_DISTANCE;
+        boolean bigOnly = distance > SPRITE_NEAR_DISTANCE;
+        boolean hasSprites = loadedSpriteChunks.containsKey(chunkCoord);
+
+        if (!shouldHaveSprites && hasSprites) {
+            // Entferne Sprites
+            List<com.jme3.scene.Geometry> sprites = loadedSpriteChunks.remove(chunkCoord);
+            for (com.jme3.scene.Geometry sprite : sprites) {
+                spriteNode.detachChild(sprite);
+            }
+            System.out.println("Sprites entfernt für Chunk (" + chunkX + ", " + chunkZ + ") - zu weit entfernt");
+        } else if (shouldHaveSprites && !hasSprites) {
+            // Lade Sprites
+            try {
+                TerrainTile[] tiles = tileProvider.getTileData(chunkX, chunkZ, CHUNK_SIZE);
+                createSpriteOverlay(chunkX, chunkZ, tiles, bigOnly);
+            } catch (Exception e) {
+                System.err.println("FEHLER beim Laden von Sprites für Chunk (" + chunkX + ", " + chunkZ + "): " + e.getMessage());
+            }
+        }
+        // LOD-Update wird nicht durchgeführt (würde Sprites neu erstellen müssen)
+    }
+
+    private void loadChunk(int chunkX, int chunkZ, int centerX, int centerZ) {
         System.out.println("Lade Chunk: (" + chunkX + ", " + chunkZ + ")");
 
         try {
@@ -333,8 +374,15 @@ public class TerrainLayer extends Layer {
             // Erstelle Wasser-Overlay für diesen Chunk
             createWaterOverlay(chunkX, chunkZ, tiles, worldX, worldZ);
 
-            // Erstelle Sprites für diesen Chunk
-            createSpriteOverlay(chunkX, chunkZ, tiles, false);
+            // Erstelle Sprites für diesen Chunk basierend auf Distanz
+            int distance = Math.max(Math.abs(chunkX - centerX), Math.abs(chunkZ - centerZ));
+            if (distance <= SPRITE_FAR_DISTANCE) {
+                boolean bigOnly = distance > SPRITE_NEAR_DISTANCE;
+                createSpriteOverlay(chunkX, chunkZ, tiles, bigOnly);
+                System.out.println("Sprites geladen für Chunk (" + chunkX + ", " + chunkZ + ") - Distanz: " + distance + ", bigOnly: " + bigOnly);
+            } else {
+                System.out.println("Keine Sprites für Chunk (" + chunkX + ", " + chunkZ + ") - Distanz: " + distance + " > " + SPRITE_FAR_DISTANCE);
+            }
 
             System.out.println("Chunk geladen: " + name + " at (" + worldX + ", 0, " + worldZ + ")");
 
@@ -604,72 +652,10 @@ public class TerrainLayer extends Layer {
 
         List<com.jme3.scene.Geometry> spriteGeometries = new java.util.ArrayList<>();
 
-        // Gruppiere Sprites nach Typ für Batching
-        Map<Sprite.SpriteType, List<Sprite>> spritesByType = new java.util.HashMap<>();
+        // Jeder Sprite rendert sich selbst
         for (Sprite sprite : sprites) {
-            spritesByType.computeIfAbsent(sprite.getType(), k -> new java.util.ArrayList<>()).add(sprite);
-        }
-
-        // Erstelle Billboard-Geometries für jeden Typ
-        for (Map.Entry<Sprite.SpriteType, List<Sprite>> entry : spritesByType.entrySet()) {
-            Sprite.SpriteType type = entry.getKey();
-            List<Sprite> spritesOfType = entry.getValue();
-
-            // Erstelle Material für diesen Sprite-Typ
-            Material spriteMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-
-            // Lade Textur (verwende Placeholder wenn nicht vorhanden)
-            Texture tex = null;
-            try {
-                tex = assetManager.loadTexture(type.getTexturePath());
-            } catch (Exception e) {
-                // Placeholder: Farbiges Quad
-                System.out.println("Warnung: Textur " + type.getTexturePath() + " nicht gefunden, verwende Farbe");
-            }
-
-            if (tex != null) {
-                spriteMat.setTexture("ColorMap", tex);
-            } else {
-                // Fallback-Farben für verschiedene Typen
-                ColorRGBA color;
-                if (type == Sprite.SpriteType.TREE_SMALL || type == Sprite.SpriteType.TREE_LARGE) {
-                    color = new ColorRGBA(0.2f, 0.6f, 0.2f, 1f); // Grün
-                } else if (type == Sprite.SpriteType.BUSH) {
-                    color = new ColorRGBA(0.4f, 0.7f, 0.3f, 1f); // Hellgrün
-                } else if (type == Sprite.SpriteType.GRASS) {
-                    color = new ColorRGBA(0.5f, 0.8f, 0.4f, 1f); // Sehr hellgrün
-                } else {
-                    color = new ColorRGBA(0.5f, 0.5f, 0.5f, 1f); // Grau (ROCK)
-                }
-                spriteMat.setColor("Color", color);
-            }
-
-            spriteMat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
-            spriteMat.getAdditionalRenderState().setFaceCullMode(com.jme3.material.RenderState.FaceCullMode.Off);
-
-            // Erstelle einzelne Billboards für jeden Sprite
-            for (Sprite sprite : spritesOfType) {
-                float height = type.getDefaultHeight() * sprite.getScale();
-                float width = height * 0.7f; // Aspect ratio
-
-                com.jme3.scene.shape.Quad quad = new com.jme3.scene.shape.Quad(width, height);
-                com.jme3.scene.Geometry geom = new com.jme3.scene.Geometry(
-                    "sprite_" + type.name() + "_" + chunkX + "_" + chunkZ,
-                    quad
-                );
-                geom.setMaterial(spriteMat);
-
-                // Positioniere Sprite
-                Vector3f pos = sprite.getPosition();
-                geom.setLocalTranslation(pos.x - width/2, pos.y, pos.z);
-
-                // Billboard-Rotation (immer zur Kamera zeigen)
-                geom.addControl(new com.jme3.scene.control.BillboardControl());
-
-                geom.setQueueBucket(com.jme3.renderer.queue.RenderQueue.Bucket.Transparent);
-                spriteNode.attachChild(geom);
-                spriteGeometries.add(geom);
-            }
+            List<com.jme3.scene.Geometry> geoms = sprite.createGeometries(assetManager, spriteNode);
+            spriteGeometries.addAll(geoms);
         }
 
         loadedSpriteChunks.put(new Vector2f(chunkX, chunkZ), spriteGeometries);

@@ -1,55 +1,35 @@
 package com.example.jme07;
 
+import com.jme3.asset.AssetManager;
 import com.jme3.math.Vector3f;
+import com.jme3.scene.Node;
+import java.util.List;
 
 /**
- * Sprite - Repräsentiert ein Billboard-Objekt in der Welt
- * (z.B. Baum, Gras, Stein)
+ * Sprite - Abstrakte Basisklasse für Sprites in der Welt
+ * Jeder Sprite ist selbst verantwortlich für sein Rendering
  */
-public class Sprite {
+public abstract class Sprite {
 
-    private Vector3f position;     // Weltposition
-    private SpriteType type;       // Typ des Sprites
-    private float scale;           // Skalierung (1.0 = normal)
-    private float rotation;        // Rotation um Y-Achse (in Radiant)
+    protected Vector3f position;     // Weltposition
+    protected float scale;           // Skalierung (1.0 = normal)
+    protected float rotation;        // Rotation um Y-Achse (in Radiant)
+    protected boolean isBig;         // true = wird auch in Far-LOD angezeigt
 
-    public enum SpriteType {
-        TREE_SMALL("Textures/Sprites/tree_small.png", 3f),
-        TREE_LARGE("Textures/Sprites/tree_large.png", 5f),
-        BUSH("Textures/Sprites/bush.png", 1f),
-        GRASS("Textures/Sprites/grass.png", 0.5f),
-        ROCK("Textures/Sprites/rock.png", 1.5f);
-
-        private final String texturePath;
-        private final float defaultHeight;
-
-        SpriteType(String texturePath, float defaultHeight) {
-            this.texturePath = texturePath;
-            this.defaultHeight = defaultHeight;
-        }
-
-        public String getTexturePath() {
-            return texturePath;
-        }
-
-        public float getDefaultHeight() {
-            return defaultHeight;
-        }
-    }
-
-    public Sprite(Vector3f position, SpriteType type) {
+    public Sprite(Vector3f position, float scale, float rotation, boolean isBig) {
         this.position = position;
-        this.type = type;
-        this.scale = 1.0f;
-        this.rotation = 0f;
-    }
-
-    public Sprite(Vector3f position, SpriteType type, float scale, float rotation) {
-        this.position = position;
-        this.type = type;
         this.scale = scale;
         this.rotation = rotation;
+        this.isBig = isBig;
     }
+
+    /**
+     * Erstellt die Geometries für diesen Sprite und fügt sie dem Node hinzu
+     * @param assetManager AssetManager für Texturen/Materialien
+     * @param parentNode Node zu dem die Geometries hinzugefügt werden
+     * @return Liste der erstellten Geometries (für Cleanup)
+     */
+    public abstract List<com.jme3.scene.Geometry> createGeometries(AssetManager assetManager, Node parentNode);
 
     public Vector3f getPosition() {
         return position;
@@ -57,14 +37,6 @@ public class Sprite {
 
     public void setPosition(Vector3f position) {
         this.position = position;
-    }
-
-    public SpriteType getType() {
-        return type;
-    }
-
-    public void setType(SpriteType type) {
-        this.type = type;
     }
 
     public float getScale() {
@@ -83,13 +55,17 @@ public class Sprite {
         this.rotation = rotation;
     }
 
+    public boolean isBig() {
+        return isBig;
+    }
+
     @Override
     public String toString() {
-        return "Sprite{" +
+        return getClass().getSimpleName() + "{" +
                 "position=" + position +
-                ", type=" + type +
                 ", scale=" + scale +
                 ", rotation=" + rotation +
+                ", isBig=" + isBig +
                 '}';
     }
 }

@@ -20,6 +20,7 @@ public class ProceduralSpriteProvider implements SpriteProvider {
     private static final int BUSH_DENSITY = 10;
     private static final int GRASS_DENSITY = 20;
     private static final int ROCK_DENSITY = 3;
+    private static final int MODEL_DENSITY = 2;  // 3D Modelle (seltener)
 
     public ProceduralSpriteProvider(long seed, TileProvider terrainProvider, int chunkSize) {
         this.seed = seed;
@@ -42,6 +43,9 @@ public class ProceduralSpriteProvider implements SpriteProvider {
         if (!bigOnly)
             generateGrassSprites(sprites, random, tiles, chunkX, chunkZ, chunkSize);
 
+        // Generiere 3D Model Sprites (immer, auch bei bigOnly)
+        generateModelSprites(sprites, random, tiles, chunkX, chunkZ, chunkSize);
+
         return sprites;
     }
 
@@ -62,17 +66,7 @@ public class ProceduralSpriteProvider implements SpriteProvider {
                     float height = tile.getHeight();
 
                     Vector3f position = new Vector3f(worldX, height, worldZ);
-
-                    // Zufälliger Baum-Typ
-                    Sprite.SpriteType type = random.nextBoolean()
-                            ? Sprite.SpriteType.TREE_SMALL
-                            : Sprite.SpriteType.TREE_LARGE;
-
-                    // Zufällige Skalierung und Rotation
-                    float scale = 0.8f + random.nextFloat() * 0.4f; // 0.8 - 1.2
-                    float rotation = random.nextFloat() * (float) Math.PI * 2f;
-
-                    sprites.add(new Sprite(position, type, scale, rotation));
+                    sprites.add(SpriteBuilders.createRandomTree(position, random));
                 }
             }
         }
@@ -93,10 +87,7 @@ public class ProceduralSpriteProvider implements SpriteProvider {
                     float height = tile.getHeight();
 
                     Vector3f position = new Vector3f(worldX, height, worldZ);
-                    float scale = 0.7f + random.nextFloat() * 0.6f;
-                    float rotation = random.nextFloat() * (float) Math.PI * 2f;
-
-                    sprites.add(new Sprite(position, Sprite.SpriteType.BUSH, scale, rotation));
+                    sprites.add(SpriteBuilders.createRandomBush(position, random));
                 }
             }
         }
@@ -118,10 +109,7 @@ public class ProceduralSpriteProvider implements SpriteProvider {
                     float height = tile.getHeight();
 
                     Vector3f position = new Vector3f(worldX, height, worldZ);
-                    float scale = 0.5f + random.nextFloat() * 1.0f;
-                    float rotation = random.nextFloat() * (float) Math.PI * 2f;
-
-                    sprites.add(new Sprite(position, Sprite.SpriteType.ROCK, scale, rotation));
+                    sprites.add(SpriteBuilders.createRandomRock(position, random));
                 }
             }
         }
@@ -143,10 +131,29 @@ public class ProceduralSpriteProvider implements SpriteProvider {
                     float height = tile.getHeight();
 
                     Vector3f position = new Vector3f(worldX, height, worldZ);
-                    float scale = 0.5f + random.nextFloat() * 0.5f;
-                    float rotation = random.nextFloat() * (float) Math.PI * 2f;
+                    sprites.add(SpriteBuilders.createRandomGrass(position, random));
+                }
+            }
+        }
+    }
 
-                    sprites.add(new Sprite(position, Sprite.SpriteType.GRASS, scale, rotation));
+    private void generateModelSprites(List<Sprite> sprites, Random random, TerrainTile[] tiles, int chunkX, int chunkZ, int chunkSize) {
+        for (int i = 0; i < MODEL_DENSITY; i++) {
+            int localX = random.nextInt(chunkSize);
+            int localZ = random.nextInt(chunkSize);
+            int index = localZ * chunkSize + localX;
+
+            if (index >= 0 && index < tiles.length) {
+                TerrainTile tile = tiles[index];
+
+                // Models nur auf Gras, nicht auf Straßen oder im Wasser
+                if (!tile.hasWater() && tile.getMaterialKey().equals("grass")) {
+                    float worldX = chunkX * (chunkSize - 1) + localX;
+                    float worldZ = chunkZ * (chunkSize - 1) + localZ;
+                    float height = tile.getHeight();
+
+                    Vector3f position = new Vector3f(worldX, height, worldZ);
+                    sprites.add(SpriteBuilders.createRandomModel(position, random));
                 }
             }
         }
@@ -155,6 +162,7 @@ public class ProceduralSpriteProvider implements SpriteProvider {
     @Override
     public String getName() {
         return "ProceduralSpriteProvider(seed=" + seed + ", densities=[trees=" + TREE_DENSITY +
-                ", bushes=" + BUSH_DENSITY + ", rocks=" + ROCK_DENSITY + ", grass=" + GRASS_DENSITY + "])";
+                ", bushes=" + BUSH_DENSITY + ", rocks=" + ROCK_DENSITY + ", grass=" + GRASS_DENSITY +
+                ", models=" + MODEL_DENSITY + "])";
     }
 }
