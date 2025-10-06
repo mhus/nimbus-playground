@@ -42,22 +42,22 @@ public class CrossRoadTileProvider extends AbstractTileManipulator {
 
         System.out.println("CrossRoadTileProvider: Base has " + materials.size() + " materials");
 
-        // Füge Straßen-Material hinzu - DiffuseMap_4 (4), AlphaMap 1 Kanal R
-        // WICHTIG: Shader überspringt DiffuseMap_3! Es geht direkt von DiffuseMap_2 zu DiffuseMap_4
+        // Füge Straßen-Material hinzu - AlphaMap 1 Kanal R
+        // DiffuseMap-Index wird dynamisch berechnet (wird DiffuseMap_4, da Shader _3 überspringt)
         materials.put("road", new TerrainMaterial(
             "road",
             "Road",
             "Textures/Terrain/splat/dirt.jpg",
             1f,
-            4,  // DiffuseMap_4, NICHT _3!
-            1,
-            0
+            true,  // needsDiffuseMap
+            1,     // alphaMapIndex
+            0      // alphaMapChannel (R)
         ));
 
         System.out.println("CrossRoadTileProvider: Now has " + materials.size() + " materials total");
         for (String key : materials.keySet()) {
             TerrainMaterial tm = materials.get(key);
-            System.out.println("  - " + key + ": DiffuseIdx=" + tm.getDiffuseMapIndex() +
+            System.out.println("  - " + key + ": DiffuseIdx=" + tm.calculateDiffuseMapIndex() +
                 ", AlphaMap=" + tm.getAlphaMapIndex() + ", Channel=" + tm.getAlphaMapChannel());
         }
 
