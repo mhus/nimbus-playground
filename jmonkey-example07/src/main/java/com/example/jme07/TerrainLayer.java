@@ -44,6 +44,7 @@ public class TerrainLayer extends Layer {
     private Vector2f lastCameraChunk = new Vector2f(Float.MAX_VALUE, Float.MAX_VALUE);
     private com.jme3.scene.Geometry currentTileMarker = null;
     private Vector2f lastMarkedTile = new Vector2f(Float.MAX_VALUE, Float.MAX_VALUE);
+    private Material waterMat;
 
     public TerrainLayer(AssetManager assetManager, Node rootNode, Camera cam) {
         super("TerrainLayer", assetManager, rootNode, cam);
@@ -412,14 +413,16 @@ public class TerrainLayer extends Layer {
         com.jme3.scene.Geometry waterGeom = new com.jme3.scene.Geometry("water_" + chunkX + "_" + chunkZ, waterQuad);
 
         // Wasser-Material mit animierten Wellen
-        Material waterMat = new Material(assetManager, "MatDefs/Water.j3md");
-        waterMat.setColor("Color", new ColorRGBA(0.2f, 0.4f, 0.8f, 0.5f)); // Halbtransparentes Blau
-        waterMat.setFloat("WaveHeight", 0.3f);     // Höhe der Wellen
-        waterMat.setFloat("WaveSpeed", 1.0f);      // Geschwindigkeit
-        waterMat.setFloat("WaveFrequency", 0.05f); // Frequenz
-        waterMat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
-        waterMat.getAdditionalRenderState().setDepthWrite(false);
-        waterMat.getAdditionalRenderState().setFaceCullMode(com.jme3.material.RenderState.FaceCullMode.Off);
+        if (waterMat == null) {
+            waterMat = new Material(assetManager, "MatDefs/Water.j3md");
+            waterMat.setColor("Color", new ColorRGBA(0.2f, 0.4f, 0.8f, 0.5f)); // Halbtransparentes Blau
+            waterMat.setFloat("WaveHeight", 0.3f);     // Höhe der Wellen
+            waterMat.setFloat("WaveSpeed", 1.0f);      // Geschwindigkeit
+            waterMat.setFloat("WaveFrequency", 0.05f); // Frequenz
+            waterMat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
+            waterMat.getAdditionalRenderState().setDepthWrite(false);
+            waterMat.getAdditionalRenderState().setFaceCullMode(com.jme3.material.RenderState.FaceCullMode.Off);
+        }
         waterGeom.setMaterial(waterMat);
 
         // Berechne durchschnittliche Wasserhöhe für diesen Chunk
