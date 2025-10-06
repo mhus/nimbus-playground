@@ -16,19 +16,16 @@ import com.jme3.texture.Texture;
  * BackdropLayer - Erzeugt eine ferne Landschafts-Kulisse am Horizont
  * Die Kulisse ist ein Ring von Quads, die immer der Kamera folgen
  */
-public class BackdropLayer {
+public class BackdropLayer extends Layer {
 
     private Node backdropNode;
-    private Camera cam;
-    private AssetManager assetManager;
 
     private static final float BACKDROP_DISTANCE = 800f;  // Distanz der Kulisse (weiter weg als Nebel)
     private static final float BACKDROP_HEIGHT = 400f;    // Höhe der Kulisse
     private static final int BACKDROP_SEGMENTS = 32;       // Anzahl der Segmente im Ring
 
     public BackdropLayer(AssetManager assetManager, Node rootNode, Camera cam) {
-        this.assetManager = assetManager;
-        this.cam = cam;
+        super("BackdropLayer", assetManager, rootNode, cam);
         this.backdropNode = new Node("BackdropNode");
         rootNode.attachChild(backdropNode);
 
@@ -95,18 +92,14 @@ public class BackdropLayer {
         System.out.println("BackdropLayer erstellt: " + BACKDROP_SEGMENTS + " Berg-Silhouetten bei Distanz " + BACKDROP_DISTANCE);
     }
 
-    /**
-     * Update - folgt der Kamera auf X/Z Ebene
-     */
+    @Override
     public void update(float tpf) {
         // Kulisse folgt der Kamera (nur X und Z)
         Vector3f camPos = cam.getLocation();
         backdropNode.setLocalTranslation(camPos.x, 0, camPos.z);
     }
 
-    /**
-     * Cleanup
-     */
+    @Override
     public void cleanup() {
         if (backdropNode != null && backdropNode.getParent() != null) {
             backdropNode.removeFromParent();

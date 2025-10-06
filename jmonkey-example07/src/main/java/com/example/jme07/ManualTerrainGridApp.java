@@ -14,6 +14,9 @@ import com.jme3.math.Vector2f;
 import com.jme3.math.Vector3f;
 import com.jme3.scene.Node;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Manuelles dynamisches Terrain-Loading ohne TerrainGrid.
  * Wir verwalten die Chunks selbst basierend auf der Kamera-Position.
@@ -25,11 +28,9 @@ public class ManualTerrainGridApp extends SimpleApplication {
     private static final float GRAVITY = -30f;
     private float verticalVelocity = 0f;
 
-    // Layer System
-    private TerrainLayer terrainLayer;
-    private SkyLayer skyLayer;
-    private BackdropLayer backdropLayer;
-    private EffectLayer effectLayer;
+    // Layer System - Liste aller Layer
+    private List<Layer> layers = new ArrayList<>();
+    private TerrainLayer terrainLayer; // Spezielle Referenz für Terrain-Kollision
 
     // Fog Configuration
     private static final boolean USE_SMOOTH_FOG = true; // true = weicher Nebel-Verlauf, false = deutliche Boxen
@@ -56,20 +57,25 @@ public class ManualTerrainGridApp extends SimpleApplication {
         // Layer-System: Terrain -> Sky -> Backdrop -> Fog
         // Reihenfolge wichtig für korrektes Rendering
 
+        System.out.println("\n=== Initialisiere Layer-System ===");
+
         // 0. Terrain Layer - Dynamisches Terrain mit Chunk-Loading
         terrainLayer = new TerrainLayer(assetManager, rootNode, cam);
+        layers.add(terrainLayer);
 
         // 1. Sky Layer - Himmel im Hintergrund mit Sonnen-Glow
-        skyLayer = new SkyLayer(assetManager, rootNode, cam, viewPort);
+        layers.add(new SkyLayer(assetManager, rootNode, cam, viewPort));
 
         // 2. Backdrop Layer - Ferne Berge/Landschaft
-        backdropLayer = new BackdropLayer(assetManager, rootNode, cam);
+        layers.add(new BackdropLayer(assetManager, rootNode, cam));
 
-        // 3. Effect Layer - Vorerst deaktiviert, da nicht sichtbar
-        // effectLayer = new EffectLayer(assetManager, viewPort);
-
-        // Stattdessen: Test mit einfacher sichtbarer Geometrie
+        // 3. Fog - Nebel am Horizont (noch nicht als Layer-Klasse)
         createTestFog();
+
+        System.out.println("=== " + layers.size() + " Layer initialisiert ===\n");
+        for (Layer layer : layers) {
+            System.out.println("  - " + layer.getName());
+        }
     }
 
 
@@ -240,17 +246,12 @@ public class ManualTerrainGridApp extends SimpleApplication {
 
     @Override
     public void simpleUpdate(float tpf) {
-        // Update Layer System
-        if (terrainLayer != null) {
-            terrainLayer.update(tpf);
+        // Update alle Layer
+        for (Layer layer : layers) {
+            layer.update(tpf);
         }
-        if (skyLayer != null) {
-            skyLayer.update(tpf);
-        }
-        if (backdropLayer != null) {
-            backdropLayer.update(tpf);
-        }
-        // Nebel folgt der Kamera
+
+        // Nebel folgt der Kamera (noch nicht als Layer)
         if (fogNode != null) {
             Vector3f camPos = cam.getLocation();
             fogNode.setLocalTranslation(camPos.x, 0, camPos.z);

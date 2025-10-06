@@ -22,13 +22,11 @@ import java.util.Map;
 /**
  * TerrainLayer - Verwaltet das dynamische Terrain mit Chunk-Loading
  */
-public class TerrainLayer {
+public class TerrainLayer extends Layer {
 
     private TileProvider tileProvider;
     private Node terrainNode;
     private Map<Vector2f, TerrainQuad> loadedChunks = new HashMap<>();
-    private Camera cam;
-    private AssetManager assetManager;
 
     private static final int CHUNK_SIZE = 65;
     private static final int VIEW_DISTANCE = 12;
@@ -37,8 +35,8 @@ public class TerrainLayer {
     private Vector2f lastCameraChunk = new Vector2f(Float.MAX_VALUE, Float.MAX_VALUE);
 
     public TerrainLayer(AssetManager assetManager, Node rootNode, Camera cam) {
-        this.assetManager = assetManager;
-        this.cam = cam;
+        super("TerrainLayer", assetManager, rootNode, cam);
+
         this.terrainNode = new Node("TerrainNode");
         rootNode.attachChild(terrainNode);
 
@@ -51,6 +49,7 @@ public class TerrainLayer {
         System.out.println("TileProvider: " + tileProvider.getName());
     }
 
+    @Override
     public void update(float tpf) {
         // Chunk-Management
         Vector3f camPos = cam.getLocation();
@@ -252,6 +251,7 @@ public class TerrainLayer {
         return t * t * (3f - 2f * t);
     }
 
+    @Override
     public void cleanup() {
         if (terrainNode != null && terrainNode.getParent() != null) {
             terrainNode.removeFromParent();

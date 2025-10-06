@@ -20,13 +20,10 @@ import com.jme3.util.SkyFactory;
  * SkyLayer - Erzeugt einen dynamischen Himmel mit Beleuchtung
  * Verwendet eine Sky-Sphere die der Kamera folgt
  */
-public class SkyLayer {
+public class SkyLayer extends Layer {
 
     private Spatial sky;
     private Geometry sunGeometry;
-    private Node rootNode;
-    private Camera cam;
-    private AssetManager assetManager;
     private DirectionalLight sun;
     private AmbientLight ambient;
     private ViewPort viewPort;
@@ -38,9 +35,7 @@ public class SkyLayer {
     private static final float SUN_DISTANCE = 850f;
 
     public SkyLayer(AssetManager assetManager, Node rootNode, Camera cam, ViewPort viewPort) {
-        this.assetManager = assetManager;
-        this.rootNode = rootNode;
-        this.cam = cam;
+        super("SkyLayer", assetManager, rootNode, cam);
         this.viewPort = viewPort;
 
         createLighting();
@@ -190,9 +185,7 @@ public class SkyLayer {
         rootNode.attachChild(sky);
     }
 
-    /**
-     * Update - Himmel und Sonne folgen der Kamera
-     */
+    @Override
     public void update(float tpf) {
         Vector3f camPos = cam.getLocation();
 
@@ -221,9 +214,7 @@ public class SkyLayer {
         }
     }
 
-    /**
-     * Cleanup
-     */
+    @Override
     public void cleanup() {
         if (sky != null && sky.getParent() != null) {
             sky.removeFromParent();
