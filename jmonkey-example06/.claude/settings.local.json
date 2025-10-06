@@ -17,7 +17,10 @@
       "WebFetch(domain:stackoverflow.com)",
       "WebFetch(domain:hub.jmonkeyengine.org)",
       "WebFetch(domain:github.com)",
-      "Bash(/dev/null)"
+      "Bash(/dev/null)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(awk:*)"
     ],
     "deny": [],
     "ask": []

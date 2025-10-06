@@ -42,16 +42,26 @@ public class CrossRoadTileProvider extends AbstractTileManipulator {
 
         System.out.println("CrossRoadTileProvider: Base has " + materials.size() + " materials");
 
-        // Füge Straßen-Material hinzu - AlphaMap 1 Kanal R
-        // DiffuseMap-Index wird dynamisch berechnet (wird DiffuseMap_4, da Shader _3 überspringt)
-        materials.put("road", new TerrainMaterial(
-            "road",
-            "Road",
+        // Kleine Straßen - AlphaMap 1 Kanal R (DiffuseMap_4)
+        materials.put("road_small", new TerrainMaterial(
+            "road_small",
+            "Small Road",
             "Textures/Terrain/splat/dirt.jpg",
             1f,
             true,  // needsDiffuseMap
             1,     // alphaMapIndex
             0      // alphaMapChannel (R)
+        ));
+
+        // Große Straßen - AlphaMap 1 Kanal G (DiffuseMap_5)
+        materials.put("road_large", new TerrainMaterial(
+            "road_large",
+            "Large Road",
+            "Textures/Terrain/splat/road.jpg",
+            1f,
+            true,  // needsDiffuseMap
+            1,     // alphaMapIndex
+            1      // alphaMapChannel (G)
         ));
 
         System.out.println("CrossRoadTileProvider: Now has " + materials.size() + " materials total");
@@ -66,8 +76,6 @@ public class CrossRoadTileProvider extends AbstractTileManipulator {
 
     @Override
     protected TerrainTile[] manipulateTiles(TerrainTile[] baseTiles, int chunkX, int chunkZ, int size) {
-        // Erstelle Kopie der Tiles für Manipulation
-
         for (int z = 0; z < size; z++) {
             for (int x = 0; x < size; x++) {
                 int index = z * size + x;
@@ -76,20 +84,19 @@ public class CrossRoadTileProvider extends AbstractTileManipulator {
                 int worldX = chunkX * (size - 1) + x;
                 int worldZ = chunkZ * (size - 1) + z;
 
-                // Prüfe ob diese Position auf einer Straße liegt
-                if (isOnRoad(worldX, worldZ)) {
+                // Bestimme Straßentyp
+                String roadType = getRoadType(worldX, worldZ);
+
+                if (roadType != null) {
                     TerrainTile baseTile = baseTiles[index];
                     // Erstelle Straßen-Tile: gleiche Position aber tiefer + Straßen-Material
                     float newHeight = baseTile.getHeight() - ROAD_DEPTH;
                     baseTiles[index] = new TerrainTile(
                         newHeight,
-                        "road",
+                        roadType,  // "road_small" oder "road_large"
                         baseTile.getWetness(),
                         baseTile.getTemperature()
                     );
-                } else {
-                    // Behalte Original-Tile
-                    // nothing todo baseTiles[index] = baseTile;
                 }
             }
         }
@@ -98,26 +105,27 @@ public class CrossRoadTileProvider extends AbstractTileManipulator {
     }
 
     /**
-     * Prüft ob eine Weltkoordinate auf einer Straße liegt
+     * Bestimmt den Straßentyp an einer Weltkoordinate
+     * @return "road_large" für große Straßen, "road_small" für kleine Straßen, null wenn keine Straße
      */
-    private boolean isOnRoad(int worldX, int worldZ) {
-        // Hauptstraßen - immer vorhanden
+    private String getRoadType(int worldX, int worldZ) {
+        // Hauptstraßen - große Straßen (immer vorhanden)
         if (isOnMainRoad(worldX, worldZ)) {
-            return true;
+            return "road_large";
         }
 
-        // Nebenstraßen - immer vorhanden
+        // Nebenstraßen - große Straßen (immer vorhanden)
         if (isOnSecondaryRoad(worldX, worldZ)) {
-            return true;
+            return "road_large";
         }
 
         // Kleine Straßen - nur in dichten Bereichen
         float density = calculateDensity(worldX, worldZ);
         if (density > 0.5f && isOnLocalRoad(worldX, worldZ)) {
-            return true;
+            return "road_small";
         }
 
-        return false;
+        return null;
     }
 
     /**
