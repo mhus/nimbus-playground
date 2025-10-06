@@ -76,8 +76,9 @@ public class ProceduralTileProvider implements TileProvider {
                 // Generiere zusätzliche Parameter
                 float wetness = (noise(worldX * 0.1f, worldZ * 0.1f) + 1f) / 2f; // 0-1
                 float temperature = noise(worldX * 0.05f + 100, worldZ * 0.05f + 100); // -1 bis 1
+                float speedMultiplier = getSpeedMultiplierForMaterial(materialKey);
 
-                tiles[index] = new TerrainTile(height, materialKey, wetness, temperature);
+                tiles[index] = new TerrainTile(height, materialKey, wetness, temperature, speedMultiplier);
             }
         }
 
@@ -97,6 +98,22 @@ public class ProceduralTileProvider implements TileProvider {
             return "grass";
         } else {
             return "rock";
+        }
+    }
+
+    /**
+     * Bestimmt den Speed-Multiplier für ein Material
+     */
+    private float getSpeedMultiplierForMaterial(String materialKey) {
+        switch (materialKey) {
+            case "sand":
+                return 1.0f; // Normal
+            case "grass":
+                return 0.9f; // Langsamer auf Gras
+            case "rock":
+                return 1.0f; // Normal
+            default:
+                return 1.0f;
         }
     }
 

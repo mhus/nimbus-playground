@@ -32,8 +32,11 @@ public class TerrainLayer extends Layer {
     private static final int CHUNK_SIZE = 65;
     private static final int VIEW_DISTANCE = 12;
     private static final float GROUND_OFFSET = 5.0f;  // Erhöht für bessere Sicht (Augenhöhe + Sicherheitsabstand)
+    private static final boolean SHOW_CURRENT_TILE = true;  // true = zeigt aktuelle Tile rot an
 
     private Vector2f lastCameraChunk = new Vector2f(Float.MAX_VALUE, Float.MAX_VALUE);
+    private com.jme3.scene.Geometry currentTileMarker = null;
+    private Vector2f lastMarkedTile = new Vector2f(Float.MAX_VALUE, Float.MAX_VALUE);
 
     public TerrainLayer(AssetManager assetManager, Node rootNode, Camera cam) {
         super("TerrainLayer", assetManager, rootNode, cam);
@@ -68,6 +71,11 @@ public class TerrainLayer extends Layer {
             updateVisibleChunks(chunkX, chunkZ);
             lastCameraChunk = currentChunk;
         }
+
+        // Aktualisiere Tile-Marker wenn aktiviert
+        if (SHOW_CURRENT_TILE) {
+            updateCurrentTileMarker(camPos);
+        }
     }
 
     public float getTerrainHeight(float x, float z) {
@@ -75,8 +83,8 @@ public class TerrainLayer extends Layer {
         // Das verhindert, dass die Kamera in Löcher fällt
         float maxHeight = Float.NEGATIVE_INFINITY;
 
-        for (int dx = -2; dx <= 2; dx++) {
-            for (int dz = -2; dz <= 2; dz++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
                 float sampleX = x + dx;
                 float sampleZ = z + dz;
                 float height = getTerrainHeightAt(sampleX, sampleZ);
@@ -140,6 +148,56 @@ public class TerrainLayer extends Layer {
 
     public float getGroundOffset() {
         return GROUND_OFFSET;
+    }
+
+    public float getSpeedMultiplier(float x, float z) {
+        // Prüfe umliegende Punkte (-1, 0, 1) und nimm den Durchschnitt
+        float totalSpeed = 0f;
+        int count = 0;
+
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                float sampleX = x + dx;
+                float sampleZ = z + dz;
+                float speed = getSpeedMultiplierAt(sampleX, sampleZ);
+                totalSpeed += speed;
+                count++;
+            }
+        }
+
+        return totalSpeed / count;
+    }
+
+    private float getSpeedMultiplierAt(float x, float z) {
+        // Berechne den Chunk, in dem sich die Position befindet
+        int chunkX = (int) Math.floor(x / (CHUNK_SIZE - 1));
+        int chunkZ = (int) Math.floor(z / (CHUNK_SIZE - 1));
+        Vector2f chunkCoord = new Vector2f(chunkX, chunkZ);
+
+        TerrainQuad terrain = loadedChunks.get(chunkCoord);
+        if (terrain != null) {
+            try {
+                // Berechne lokale Koordinaten im Chunk
+                float localX = x - (chunkX * (CHUNK_SIZE - 1));
+                float localZ = z - (chunkZ * (CHUNK_SIZE - 1));
+
+                int ix = (int) Math.floor(localX);
+                int iz = (int) Math.floor(localZ);
+
+                if (ix >= 0 && ix < CHUNK_SIZE && iz >= 0 && iz < CHUNK_SIZE) {
+                    // Hole Speed-Multiplier vom TileProvider
+                    TerrainTile[] tiles = tileProvider.getTileData(chunkX, chunkZ, CHUNK_SIZE);
+                    int index = iz * CHUNK_SIZE + ix;
+                    if (index >= 0 && index < tiles.length) {
+                        return tiles[index].getSpeedMultiplier();
+                    }
+                }
+            } catch (Exception e) {
+                // Bei Fehler: Default-Speed zurückgeben
+            }
+        }
+
+        return 1.0f; // Default Speed
     }
 
     private void updateVisibleChunks(int centerX, int centerZ) {
@@ -350,8 +408,68 @@ public class TerrainLayer extends Layer {
         return t * t * (3f - 2f * t);
     }
 
+    private void updateCurrentTileMarker(Vector3f camPos) {
+        // Berechne Tile-Position (ganzzahlig)
+        int tileX = (int) Math.floor(camPos.x);
+        int tileZ = (int) Math.floor(camPos.z);
+        Vector2f currentTile = new Vector2f(tileX, tileZ);
+
+        // Prüfe ob wir auf einer neuen Tile sind
+        if (!currentTile.equals(lastMarkedTile)) {
+            // Berechne Chunk-Position und lokale Tile-Position
+            int chunkX = (int) Math.floor((float) tileX / (CHUNK_SIZE - 1));
+            int chunkZ = (int) Math.floor((float) tileZ / (CHUNK_SIZE - 1));
+            Vector2f chunkCoord = new Vector2f(chunkX, chunkZ);
+
+            TerrainQuad terrain = loadedChunks.get(chunkCoord);
+            if (terrain != null) {
+                // Berechne lokale Koordinaten innerhalb des Chunks
+                int localX = tileX - (chunkX * (CHUNK_SIZE - 1));
+                int localZ = tileZ - (chunkZ * (CHUNK_SIZE - 1));
+
+                // Erstelle einen roten Overlay für diese Tile
+                createTileOverlay(terrain, localX, localZ, tileX, tileZ);
+            }
+
+            lastMarkedTile = currentTile;
+        }
+    }
+
+    private void createTileOverlay(TerrainQuad terrain, int localX, int localZ, int worldX, int worldZ) {
+        // Entferne alten Marker
+        if (currentTileMarker != null && currentTileMarker.getParent() != null) {
+            currentTileMarker.removeFromParent();
+        }
+
+        // Erstelle Quad für eine einzelne Tile (1x1 auf dem Terrain)
+        com.jme3.scene.shape.Quad quad = new com.jme3.scene.shape.Quad(1f, 1f);
+        currentTileMarker = new com.jme3.scene.Geometry("CurrentTileOverlay", quad);
+
+        // Rotes halbtransparentes Material
+        Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        mat.setColor("Color", new ColorRGBA(1f, 0f, 0f, 0.6f));
+        mat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
+        mat.getAdditionalRenderState().setDepthWrite(false);
+        mat.getAdditionalRenderState().setDepthTest(true);
+        mat.getAdditionalRenderState().setPolyOffset(-1f, -1f); // Verhindert Z-Fighting
+        currentTileMarker.setMaterial(mat);
+
+        // Positioniere Quad auf dem Terrain (leicht über der Oberfläche)
+        float height = getTerrainHeight(worldX + 0.5f, worldZ + 0.5f);
+        currentTileMarker.setLocalTranslation(worldX, height + 0.05f, worldZ);
+
+        // Rotiere Quad um 90° damit es flach auf dem Boden liegt
+        currentTileMarker.rotate(-com.jme3.math.FastMath.HALF_PI, 0, 0);
+
+        currentTileMarker.setQueueBucket(com.jme3.renderer.queue.RenderQueue.Bucket.Transparent);
+        rootNode.attachChild(currentTileMarker);
+    }
+
     @Override
     public void cleanup() {
+        if (currentTileMarker != null && currentTileMarker.getParent() != null) {
+            currentTileMarker.removeFromParent();
+        }
         if (terrainNode != null && terrainNode.getParent() != null) {
             terrainNode.removeFromParent();
         }

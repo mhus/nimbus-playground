@@ -91,11 +91,13 @@ public class CrossRoadTileProvider extends AbstractTileManipulator {
                     TerrainTile baseTile = baseTiles[index];
                     // Erstelle Straßen-Tile: gleiche Position aber tiefer + Straßen-Material
                     float newHeight = baseTile.getHeight() - ROAD_DEPTH;
+                    float speedMultiplier = 1.5f; // Straßen sind schneller
                     baseTiles[index] = new TerrainTile(
                         newHeight,
                         roadType,  // "road_small" oder "road_large"
                         baseTile.getWetness(),
-                        baseTile.getTemperature()
+                        baseTile.getTemperature(),
+                        speedMultiplier
                     );
                 }
             }

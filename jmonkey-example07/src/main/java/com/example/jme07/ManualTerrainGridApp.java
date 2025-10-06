@@ -19,6 +19,11 @@ public class ManualTerrainGridApp extends SimpleApplication {
     private boolean isWalkMode = true; // Default: Walk Mode
     private static final float GRAVITY = -30f;
     private float verticalVelocity = 0f;
+    private float basicWalkSpeed = 10f;
+    private float basicFlightSpeed = 50f;
+
+    // Debug mode
+    private boolean debugMode = false;
 
     // Layer System - Liste aller Layer
     private List<Layer> layers = new ArrayList<>();
@@ -36,7 +41,7 @@ public class ManualTerrainGridApp extends SimpleApplication {
         // Kamera
         cam.setLocation(new Vector3f(64, 80, 64));
         cam.lookAt(new Vector3f(128, 0, 128), Vector3f.UNIT_Y);
-        flyCam.setMoveSpeed(50f);
+        flyCam.setMoveSpeed(basicWalkSpeed);
 
         System.out.println("\n=== ManualTerrainGridApp gestartet ===");
         System.out.println("Modus: WALK MODE (Drücke 'F' zum Umschalten)");
@@ -72,6 +77,10 @@ public class ManualTerrainGridApp extends SimpleApplication {
         // Toggle zwischen Walk und Flight Mode mit 'F'
         inputManager.addMapping("ToggleMode", new KeyTrigger(KeyInput.KEY_F));
         inputManager.addListener(actionListener, "ToggleMode");
+
+        // Toggle Debug Mode mit '='
+        inputManager.addMapping("ToggleDebug", new KeyTrigger(KeyInput.KEY_EQUALS));
+        inputManager.addListener(actionListener, "ToggleDebug");
     }
 
     private final ActionListener actionListener = (name, isPressed, tpf) -> {
@@ -84,6 +93,12 @@ public class ManualTerrainGridApp extends SimpleApplication {
                 // Im Flight Mode: Vertikale Geschwindigkeit zurücksetzen
                 verticalVelocity = 0f;
             }
+        }
+
+        if (name.equals("ToggleDebug") && isPressed) {
+            debugMode = !debugMode;
+            toggleDebugMode(debugMode);
+            System.out.println("Debug Mode: " + (debugMode ? "ON" : "OFF"));
         }
     };
 
@@ -104,8 +119,13 @@ public class ManualTerrainGridApp extends SimpleApplication {
         Vector3f camPos = cam.getLocation();
         float terrainHeight = terrainLayer.getTerrainHeight(camPos.x, camPos.z);
         float groundHeight = terrainHeight + terrainLayer.getGroundOffset();
+
+        // Hole Speed-Multiplier von der aktuellen Terrain-Position
+        float speedMultiplier = terrainLayer.getSpeedMultiplier(camPos.x, camPos.z);
+
         if (isWalkMode) {
 
+            flyCam.setMoveSpeed(basicWalkSpeed * speedMultiplier);
             // Anwenden der Gravitation wenn über dem Boden
             if (camPos.y > groundHeight) {
                 verticalVelocity += GRAVITY * tpf;
@@ -128,9 +148,27 @@ public class ManualTerrainGridApp extends SimpleApplication {
         } else {
             // Im Flight Mode: Stelle sicher, dass wir nicht unter dem Terrain sind
 
+            flyCam.setMoveSpeed(basicFlightSpeed);
+
             if (camPos.y < groundHeight) {
                 camPos.y = groundHeight;
                 cam.setLocation(camPos);
+            }
+        }
+    }
+
+    private void toggleDebugMode(boolean enable) {
+        traverseSceneGraph(rootNode, enable);
+    }
+
+    private void traverseSceneGraph(com.jme3.scene.Spatial spatial, boolean enableDebug) {
+        if (spatial instanceof com.jme3.scene.Geometry) {
+            com.jme3.scene.Geometry geom = (com.jme3.scene.Geometry) spatial;
+            geom.getMaterial().getAdditionalRenderState().setWireframe(enableDebug);
+        } else if (spatial instanceof com.jme3.scene.Node) {
+            com.jme3.scene.Node node = (com.jme3.scene.Node) spatial;
+            for (com.jme3.scene.Spatial child : node.getChildren()) {
+                traverseSceneGraph(child, enableDebug);
             }
         }
     }
