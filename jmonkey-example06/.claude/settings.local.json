@@ -21,7 +21,8 @@
       "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(awk:*)",
-      "Bash(xargs cat:*)"
+      "Bash(xargs cat:*)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

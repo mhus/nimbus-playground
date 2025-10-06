@@ -19,7 +19,7 @@ public class ManualTerrainGridApp extends SimpleApplication {
     private boolean isWalkMode = true; // Default: Walk Mode
     private static final float GRAVITY = -30f;
     private float verticalVelocity = 0f;
-    private float basicWalkSpeed = 10f;
+    private float basicWalkSpeed = 20f;
     private float basicFlightSpeed = 50f;
 
     // Debug mode
