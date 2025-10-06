@@ -17,6 +17,7 @@ import com.jme3.util.BufferUtils;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -149,12 +150,19 @@ public class TerrainLayer extends Layer {
         System.out.println("Lade Chunk: (" + chunkX + ", " + chunkZ + ")");
 
         try {
-            float[] heightData = tileProvider.getHeightData(chunkX, chunkZ, CHUNK_SIZE);
+            // Hole Tile-Daten (Höhe + Material + Parameter)
+            TerrainTile[] tiles = tileProvider.getTileData(chunkX, chunkZ, CHUNK_SIZE);
+
+            // Extrahiere Höhendaten für TerrainQuad
+            float[] heightData = new float[tiles.length];
+            for (int i = 0; i < tiles.length; i++) {
+                heightData[i] = tiles[i].getHeight();
+            }
 
             String name = "chunk_" + chunkX + "_" + chunkZ;
             TerrainQuad terrain = new TerrainQuad(name, CHUNK_SIZE, CHUNK_SIZE, heightData);
 
-            Material mat = createTerrainMaterial(heightData);
+            Material mat = createTerrainMaterial(tiles);
             terrain.setMaterial(mat);
 
             float worldX = chunkX * (CHUNK_SIZE - 1);
@@ -176,68 +184,50 @@ public class TerrainLayer extends Layer {
         }
     }
 
-    private Material createTerrainMaterial(float[] heightData) {
+    private Material createTerrainMaterial(TerrainTile[] tiles) {
         Material mat = new Material(assetManager, "Common/MatDefs/Terrain/TerrainLighting.j3md");
 
-        Texture grass = assetManager.loadTexture("Textures/Terrain/splat/grass.jpg");
-        grass.setWrap(Texture.WrapMode.Repeat);
+        // Lade Texturen aus Material-Liste
+        List<TerrainMaterial> materials = tileProvider.getMaterials();
 
-        Texture dirt = assetManager.loadTexture("Textures/Terrain/splat/dirt.jpg");
-        dirt.setWrap(Texture.WrapMode.Repeat);
+        for (int i = 0; i < Math.min(3, materials.size()); i++) {
+            TerrainMaterial terrainMat = materials.get(i);
+            Texture tex = assetManager.loadTexture(terrainMat.getTexturePath());
+            tex.setWrap(Texture.WrapMode.Repeat);
 
-        Texture rock = assetManager.loadTexture("Textures/Terrain/Rock/Rock.PNG");
-        rock.setWrap(Texture.WrapMode.Repeat);
+            if (i == 0) {
+                mat.setTexture("DiffuseMap", tex);
+                mat.setFloat("DiffuseMap_0_scale", terrainMat.getTextureScale());
+            } else {
+                mat.setTexture("DiffuseMap_" + i, tex);
+                mat.setFloat("DiffuseMap_" + i + "_scale", terrainMat.getTextureScale());
+            }
+        }
 
-        mat.setFloat("DiffuseMap_0_scale", 1f);
-        mat.setFloat("DiffuseMap_1_scale", 1f);
-        mat.setFloat("DiffuseMap_2_scale", 1f);
-
-        mat.setTexture("DiffuseMap", dirt);
-        mat.setTexture("DiffuseMap_1", grass);
-        mat.setTexture("DiffuseMap_2", rock);
-
-        Texture2D alphaMap = new Texture2D(createAlphaMapAbsolute(heightData));
+        // Erstelle AlphaMap basierend auf Material-IDs aus Tiles
+        Texture2D alphaMap = new Texture2D(createAlphaMapFromTiles(tiles));
         mat.setTexture("AlphaMap", alphaMap);
 
         return mat;
     }
 
-    private Image createAlphaMapAbsolute(float[] heightData) {
+    private Image createAlphaMapFromTiles(TerrainTile[] tiles) {
         int alphaMapSize = CHUNK_SIZE;
         ByteBuffer alphaBuffer = BufferUtils.createByteBuffer(alphaMapSize * alphaMapSize * 3);
 
-        final float SAND_HEIGHT = 8f;
-        final float GRASS_HEIGHT = 25f;
-        final float BLEND_DISTANCE = 10f;
+        for (int i = 0; i < tiles.length; i++) {
+            TerrainTile tile = tiles[i];
+            int materialId = tile.getMaterialId();
 
-        for (int i = 0; i < heightData.length; i++) {
-            float height = heightData[i];
+            // Direkte Zuordnung von Material-ID zu RGB-Kanälen
+            // Material 0 = Rot, Material 1 = Grün, Material 2 = Blau
+            float mat0 = (materialId == 0) ? 1f : 0f;
+            float mat1 = (materialId == 1) ? 1f : 0f;
+            float mat2 = (materialId == 2) ? 1f : 0f;
 
-            float sandAmount = 0f;
-            float grassAmount = 0f;
-            float rockAmount = 0f;
-
-            if (height <= SAND_HEIGHT - BLEND_DISTANCE/2) {
-                sandAmount = 1f;
-            } else if (height < SAND_HEIGHT + BLEND_DISTANCE/2) {
-                float t = (height - (SAND_HEIGHT - BLEND_DISTANCE/2)) / BLEND_DISTANCE;
-                t = smoothStep(t);
-                sandAmount = 1f - t;
-                grassAmount = t;
-            } else if (height < GRASS_HEIGHT - BLEND_DISTANCE/2) {
-                grassAmount = 1f;
-            } else if (height < GRASS_HEIGHT + BLEND_DISTANCE/2) {
-                float t = (height - (GRASS_HEIGHT - BLEND_DISTANCE/2)) / BLEND_DISTANCE;
-                t = smoothStep(t);
-                grassAmount = 1f - t;
-                rockAmount = t;
-            } else {
-                rockAmount = 1f;
-            }
-
-            byte red = (byte) (sandAmount * 255);
-            byte green = (byte) (grassAmount * 255);
-            byte blue = (byte) (rockAmount * 255);
+            byte red = (byte) (mat0 * 255);
+            byte green = (byte) (mat1 * 255);
+            byte blue = (byte) (mat2 * 255);
 
             alphaBuffer.put(red).put(green).put(blue);
         }
