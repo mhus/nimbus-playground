@@ -13,90 +13,164 @@ import com.jme3.scene.Node;
 import com.jme3.scene.shape.Quad;
 
 /**
- * EffectLayer - Erzeugt Nebel nur am Horizont (nicht über dem Himmel)
- * Verwendet Geometry-basierte Nebel-Ringe statt Post-Processing Filter
+ * EffectLayer - Erzeugt visuelle Effekte wie Nebel
+ * Verwendet Geometry-basierte Nebel-Ringe
  */
 public class EffectLayer {
 
     private Node fogNode;
-    private ViewPort viewPort;
+    private AssetManager assetManager;
     private Camera cam;
 
-    private static final float FOG_DISTANCE = 1000f;  // Distanz des Nebel-Rings
-    private static final float FOG_HEIGHT = 50f;     // Höhe des Nebels
-    private static final int FOG_SEGMENTS = 0;       // Anzahl der Segmente
+    // Fog Configuration
+    private static final boolean USE_SMOOTH_FOG = true; // true = weicher Nebel-Verlauf, false = deutliche Boxen
 
-    public EffectLayer(AssetManager assetManager, ViewPort viewPort) {
-        this.viewPort = viewPort;
-        // Kein Filter mehr - wir erstellen Geometrie
-        System.out.println("EffectLayer initialisiert - Geometrie-basierter Horizont-Nebel");
-    }
-
-    /**
-     * Initialisiert den Nebel mit Geometrie (wird von außen aufgerufen)
-     */
-    public void initFogGeometry(AssetManager assetManager, Node rootNode, Camera cam) {
+    public EffectLayer(AssetManager assetManager, Node rootNode, Camera cam) {
+        this.assetManager = assetManager;
         this.cam = cam;
+
         fogNode = new Node("FogNode");
         rootNode.attachChild(fogNode);
 
-        createHorizonFog(assetManager);
+        createTestFog();
+
+        System.out.println("EffectLayer initialisiert - Geometrie-basierter Nebel");
     }
 
-    private void createHorizonFog(AssetManager assetManager) {
-        // Erstelle mehrere Ringe mit verschiedenen Höhen für dichteren Nebel
-        float[] heightLevels = {-50f, 0f, 50f, 100f};
-        float[] alphaLevels = {0.4f, 0.5f, 0.6f, 0.5f};
+    private void createTestFog() {
+        if (USE_SMOOTH_FOG) {
+            createSmoothFog();
+        } else {
+            createSimpleBoxFog();
+        }
+    }
 
-        for (int layer = 0; layer < heightLevels.length; layer++) {
-            float angleStep = FastMath.TWO_PI / FOG_SEGMENTS;
+    private void createSmoothFog() {
+        // Weicher Nebel-Verlauf mit mehreren Zylindern (Ringe)
+        float[] innerRadii = {350f, 400f, 450f, 500f, 550f};
+        float[] outerRadii = {400f, 450f, 500f, 550f, 600f};
+        float[] fogAlphas = {0.2f, 0.3f, 0.4f, 0.35f, 0.25f};
+        float fogHeight = 200f;
 
-            for (int i = 0; i < FOG_SEGMENTS; i++) {
-                float angle = i * angleStep;
-                float nextAngle = (i + 1) * angleStep;
+        int segments = 64; // Viele Segmente für glatten Ring
 
-                // Berechne Positionen für dieses Segment
-                float x1 = FastMath.cos(angle) * FOG_DISTANCE;
-                float z1 = FastMath.sin(angle) * FOG_DISTANCE;
-                float x2 = FastMath.cos(nextAngle) * FOG_DISTANCE;
-                float z2 = FastMath.sin(nextAngle) * FOG_DISTANCE;
+        for (int layer = 0; layer < innerRadii.length; layer++) {
+            float innerRadius = innerRadii[layer];
+            float outerRadius = outerRadii[layer];
+            float alpha = fogAlphas[layer];
 
-                // Berechne Breite des Segments
-                float width = FastMath.sqrt((x2 - x1) * (x2 - x1) + (z2 - z1) * (z2 - z1));
+            // Erstelle Ring als Mesh aus Quads
+            com.jme3.scene.Mesh ringMesh = createRingMesh(innerRadius, outerRadius, fogHeight, segments);
+            Geometry fogGeom = new Geometry("FogRing_" + layer, ringMesh);
 
-                // Erstelle Quad für Nebel-Segment
-                Quad quad = new Quad(width, FOG_HEIGHT);
-                Geometry geom = new Geometry("fog_layer" + layer + "_seg" + i, quad);
+            Material fogMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+            // Basis-Farbe mit Vertex Colors multipliziert für Gradient-Effekt
+            fogMat.setColor("Color", new ColorRGBA(0.85f, 0.9f, 0.95f, alpha));
+            fogMat.setBoolean("VertexColor", true); // Aktiviere Vertex Colors für diffusen Gradient
+            fogMat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
+            fogMat.getAdditionalRenderState().setDepthWrite(false);
+            fogMat.getAdditionalRenderState().setFaceCullMode(com.jme3.material.RenderState.FaceCullMode.Off);
+            fogGeom.setMaterial(fogMat);
 
-                // Material mit semi-transparenter Nebelfarbe
-                Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-                ColorRGBA fogColor = new ColorRGBA(0.85f, 0.9f, 0.98f, alphaLevels[layer]);
-                mat.setColor("Color", fogColor);
-                mat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
-                mat.getAdditionalRenderState().setDepthWrite(false);
-                mat.getAdditionalRenderState().setDepthTest(false);
+            fogGeom.setLocalTranslation(0, -50, 0);
+            fogGeom.setQueueBucket(com.jme3.renderer.queue.RenderQueue.Bucket.Transparent);
 
-                geom.setMaterial(mat);
-
-                // Positioniere und rotiere das Quad
-                Vector3f center = new Vector3f((x1 + x2) / 2, heightLevels[layer], (z1 + z2) / 2);
-                geom.setLocalTranslation(center);
-
-                // Rotiere so dass es zur Mitte zeigt
-                Vector3f direction = new Vector3f(center.x, 0, center.z).normalizeLocal();
-                float rotation = FastMath.atan2(direction.x, direction.z);
-                geom.rotate(0, rotation + FastMath.HALF_PI, 0);
-
-                // Transparent bucket
-                geom.setQueueBucket(com.jme3.renderer.queue.RenderQueue.Bucket.Transparent);
-                geom.setCullHint(com.jme3.scene.Spatial.CullHint.Never);
-
-                fogNode.attachChild(geom);
-            }
+            fogNode.attachChild(fogGeom);
         }
 
-        System.out.println("Horizont-Nebel erstellt: " + heightLevels.length + " Schichten mit je " + FOG_SEGMENTS + " Segmenten");
-        System.out.println("Nebel-Position: Distance=" + FOG_DISTANCE + ", Height=" + FOG_HEIGHT);
+        System.out.println("Weicher Nebel erstellt: " + innerRadii.length + " Ring-Schichten");
+    }
+
+    private com.jme3.scene.Mesh createRingMesh(float innerRadius, float outerRadius, float height, int segments) {
+        // Erstelle einen Ring (hohler Zylinder) als Mesh mit Vertex Colors für Gradient
+        com.jme3.scene.Mesh mesh = new com.jme3.scene.Mesh();
+
+        int vertexCount = segments * 4; // 4 Vertices pro Segment
+        Vector3f[] vertices = new Vector3f[vertexCount];
+        ColorRGBA[] colors = new ColorRGBA[vertexCount];
+        int[] indices = new int[segments * 12];
+
+        float angleStep = FastMath.TWO_PI / segments;
+
+        for (int i = 0; i < segments; i++) {
+            float angle = i * angleStep;
+
+            float cosA = FastMath.cos(angle);
+            float sinA = FastMath.sin(angle);
+
+            int baseIndex = i * 4;
+
+            // Vertices für dieses Segment
+            vertices[baseIndex + 0] = new Vector3f(cosA * innerRadius, 0, sinA * innerRadius); // Innen unten
+            vertices[baseIndex + 1] = new Vector3f(cosA * innerRadius, height, sinA * innerRadius); // Innen oben
+            vertices[baseIndex + 2] = new Vector3f(cosA * outerRadius, 0, sinA * outerRadius); // Außen unten
+            vertices[baseIndex + 3] = new Vector3f(cosA * outerRadius, height, sinA * outerRadius); // Außen oben
+
+            // Vertex Colors für Gradient: Innen transparent, Mitte opak, Außen transparent
+            float innerAlpha = 0.3f;
+            colors[baseIndex + 0] = new ColorRGBA(1, 1, 1, innerAlpha);
+            colors[baseIndex + 1] = new ColorRGBA(1, 1, 1, innerAlpha);
+
+            // Außen (näher am outerRadius) - transparenter
+            float outerAlpha = 0.1f;
+            colors[baseIndex + 2] = new ColorRGBA(1, 1, 1, outerAlpha);
+            colors[baseIndex + 3] = new ColorRGBA(1, 1, 1, outerAlpha);
+
+            int nextBase = ((i + 1) % segments) * 4;
+            int indexBase = i * 12;
+
+            // Äußere Wand (2 Dreiecke)
+            indices[indexBase + 0] = baseIndex + 2;
+            indices[indexBase + 1] = baseIndex + 3;
+            indices[indexBase + 2] = nextBase + 2;
+            indices[indexBase + 3] = nextBase + 2;
+            indices[indexBase + 4] = baseIndex + 3;
+            indices[indexBase + 5] = nextBase + 3;
+
+            // Innere Wand (2 Dreiecke)
+            indices[indexBase + 6] = baseIndex + 0;
+            indices[indexBase + 7] = nextBase + 0;
+            indices[indexBase + 8] = baseIndex + 1;
+            indices[indexBase + 9] = nextBase + 0;
+            indices[indexBase + 10] = nextBase + 1;
+            indices[indexBase + 11] = baseIndex + 1;
+        }
+
+        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.Position, 3, com.jme3.util.BufferUtils.createFloatBuffer(vertices));
+        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.Color, 4, com.jme3.util.BufferUtils.createFloatBuffer(colors));
+        mesh.setBuffer(com.jme3.scene.VertexBuffer.Type.Index, 3, com.jme3.util.BufferUtils.createIntBuffer(indices));
+        mesh.updateBound();
+
+        return mesh;
+    }
+
+    private void createSimpleBoxFog() {
+        // Einfacher sichtbarer Nebel-Ring mit deutlichen Boxen
+        float fogDistance = 450f;
+        int segments = 32;
+        float angleStep = FastMath.TWO_PI / segments;
+
+        for (int i = 0; i < segments; i++) {
+            float angle = i * angleStep;
+            float x = FastMath.cos(angle) * fogDistance;
+            float z = FastMath.sin(angle) * fogDistance;
+
+            com.jme3.scene.shape.Box fogBox = new com.jme3.scene.shape.Box(100f, 150f, 100f);
+            Geometry fogGeom = new Geometry("Fog_" + i, fogBox);
+
+            Material fogMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+            fogMat.setColor("Color", new ColorRGBA(0.85f, 0.9f, 0.95f, 0.55f));
+            fogMat.getAdditionalRenderState().setBlendMode(com.jme3.material.RenderState.BlendMode.Alpha);
+            fogMat.getAdditionalRenderState().setDepthWrite(false);
+            fogGeom.setMaterial(fogMat);
+
+            fogGeom.setLocalTranslation(x, 0, z);
+            fogGeom.setQueueBucket(com.jme3.renderer.queue.RenderQueue.Bucket.Transparent);
+
+            fogNode.attachChild(fogGeom);
+        }
+
+        System.out.println("Einfacher Box-Nebel erstellt: " + segments + " Segmente bei Distanz " + fogDistance);
     }
 
     /**
