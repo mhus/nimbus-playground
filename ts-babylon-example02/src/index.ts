@@ -1,5 +1,20 @@
 import { Engine, Scene, FreeCamera, Vector3, HemisphericLight, MeshBuilder, StandardMaterial, Texture, Color3, ActionManager, ExecuteCodeAction } from '@babylonjs/core';
 
+// Struktur für Tile-Koordinaten in der Atlas-Textur
+interface TileCoordinates {
+    x: number;      // X-Position in Pixeln
+    y: number;      // Y-Position in Pixeln
+    width: number;  // Breite in Pixeln
+    height: number; // Höhe in Pixeln
+}
+
+// Tile-Atlas-Konfiguration
+interface TileAtlas {
+    textureWidth: number;   // Gesamtbreite der Atlas-Textur
+    textureHeight: number;  // Gesamthöhe der Atlas-Textur
+    tiles: { [key: string]: TileCoordinates }; // Tile-Definitionen
+}
+
 class App {
     private canvas: HTMLCanvasElement;
     private engine: Engine;
@@ -14,9 +29,45 @@ class App {
     private moveSpeed: number = 0.01;
 
     // Tile-System Parameter
-    private readonly TILES_PER_ROW = 4;    // 4 Tiles pro Reihe in der Atlas-Textur
+    private readonly TILES_PER_ROW = 5;    // 4 Tiles pro Reihe in der Atlas-Textur
     private readonly TILES_PER_COLUMN = 3; // 3 Reihen in der Atlas-Textur
-    private readonly TOTAL_TILES = 12;     // Insgesamt 12 verschiedene Tiles
+    private readonly TOTAL_TILES = 15;     // Insgesamt 12 verschiedene Tiles
+
+    // Tile-Atlas-Konfiguration - hier können Sie die Koordinaten manuell anpassen
+    private readonly TILE_ATLAS: TileAtlas = {
+        textureWidth: 512,   // Anpassen an Ihre Atlas-Größe
+        textureHeight: 384,  // Anpassen an Ihre Atlas-Größe
+        tiles: {
+            // Beispiel-Koordinaten - passen Sie diese an Ihre Atlas-Textur an
+            'grass_bushes': { x: 350, y: 0, width: 325, height: 225 },
+
+            'grass': { x: 0, y: 275, width: 325, height: 325 },
+            'dirt_l_grass_r': { x: 350, y: 275, width: 325, height: 325 },
+            'dirt_lb_grass_ru': { x: 700, y: 275, width: 325, height: 325 },
+
+            'dirt': { x: 0, y: 650, width: 128, height: 128 },
+            'grass_l_dirt_r': { x: 350, y: 650, width: 325, height: 325 },
+            'grass_lu_dirt_rb': { x: 700, y: 650, width: 325, height: 325 },
+            'water': { x: 0, y: 975, width: 128, height: 128 },
+            'dirt_stones': { x: 700, y: 975, width: 128, height: 128 },
+        }
+    };
+
+    // Tile-Namen für einfache Referenzierung
+    private readonly TILE_NAMES = {
+        GRASS: 'grass',
+        GRASS_BUSHES: 'grass_bushes',
+        DIRT_GRASS_L: 'dirt_grass_l',
+        GRASS_DIRT_R: 'grass_dirt_r',
+        DIRT_GRASS_T: 'dirt_grass_t',
+        DIRT_CORNER_TR: 'dirt_corner_tr',
+        GRASS_CORNER_BL: 'grass_corner_bl',
+        GRASS_CORNER_TL: 'grass_corner_tl',
+        WATER: 'water',
+        DIRT: 'dirt',
+        DIRT_STONES: 'dirt_stones',
+        GRASS_BOX: 'grass_box'
+    } as const;
 
     constructor() {
         // Canvas-Element aus dem DOM holen
@@ -74,7 +125,8 @@ class App {
         // KONFIGURATION: Größe der Ebene und Anzahl der Kacheln
         const GROUND_SIZE = 20;          // Größe der Ebene (20x20 Einheiten)
         const GROUND_SUBDIVISIONS = 30;  // Geometrie-Unterteilungen für glatte Darstellung
-        const TILE_REPEAT = 5;          // Anzahl der Kachel-Wiederholungen
+        const TILE_REPEAT = 15;          // Anzahl der Kachel-Wiederholungen
+        const DEBUG_TILE_BORDERS = false; // Debug: Kachel-Ränder sichtbar machen
 
         // Große Ebene für das Gitter erstellen
         const ground = MeshBuilder.CreateGround('ground', {
@@ -84,24 +136,25 @@ class App {
         }, scene);
 
         // Kachel-Material erstellen und speichern (async)
-        this.tileMaterial = await this.createTileMaterial(scene, TILE_REPEAT);
+        this.tileMaterial = await this.createTileMaterial(scene, TILE_REPEAT, DEBUG_TILE_BORDERS);
         ground.material = this.tileMaterial;
 
         return scene;
     }
 
-    private async createTileMaterial(scene: Scene, tileRepeat: number): Promise<StandardMaterial> {
+    private async createTileMaterial(scene: Scene, tileRepeat: number, debugTileBorders: boolean): Promise<StandardMaterial> {
         const material = new StandardMaterial('tileMaterial', scene);
 
-        // Atlas-Textur mit den 12 Tiles laden
-        this.tilesAtlasTexture = new Texture('./assets/tiles-textures.png', scene);
+        // Atlas-Textur mit den 12 Tiles laden - mit Cache-Busting
+        const cacheBuster = Date.now();
+        this.tilesAtlasTexture = new Texture(`/assets/textures.png?v=${cacheBuster}`, scene);
         this.tilesAtlasTexture.wrapU = Texture.WRAP_ADDRESSMODE;
         this.tilesAtlasTexture.wrapV = Texture.WRAP_ADDRESSMODE;
 
         // Warten bis Atlas geladen ist, dann Tile-Pattern erstellen
         await new Promise<void>((resolve) => {
             this.tilesAtlasTexture.onLoadObservable.addOnce(async () => {
-                this.tileTexture = await this.createTilePatternTexture(scene, tileRepeat);
+                this.tileTexture = await this.createTilePatternTexture(scene, tileRepeat, debugTileBorders);
                 resolve();
             });
         });
@@ -116,7 +169,7 @@ class App {
         return material;
     }
 
-    private async createTilePatternTexture(scene: Scene, tileRepeat: number): Promise<Texture> {
+    private async createTilePatternTexture(scene: Scene, tileRepeat: number, debugTileBorders: boolean = false): Promise<Texture> {
         const PATTERN_SIZE = 512;
         const TILES_IN_PATTERN = tileRepeat;
         const TILE_SIZE = PATTERN_SIZE / TILES_IN_PATTERN;
@@ -130,22 +183,21 @@ class App {
         const atlasImage = new Image();
         atlasImage.crossOrigin = 'anonymous';
 
+        // Cache-Busting für das Atlas-Image
+        const cacheBuster = Date.now();
+
         await new Promise<void>((resolve, reject) => {
             atlasImage.onload = () => resolve();
             atlasImage.onerror = () => reject(new Error('Failed to load atlas image'));
-            atlasImage.src = './assets/tiles-textures.png';
+            atlasImage.src = `/assets/textures.png?v=${cacheBuster}`;
         });
-
-        const tileWidth = atlasImage.width / this.TILES_PER_ROW;
-        const tileHeight = atlasImage.height / this.TILES_PER_COLUMN;
 
         // Tile-Pattern erstellen
         for (let y = 0; y < TILES_IN_PATTERN; y++) {
             for (let x = 0; x < TILES_IN_PATTERN; x++) {
                 // Tile-Typ für diese Position bestimmen
                 const tileIndex = this.getTileForPosition(x, y);
-                const atlasX = (tileIndex % this.TILES_PER_ROW) * tileWidth;
-                const atlasY = Math.floor(tileIndex / this.TILES_PER_ROW) * tileHeight;
+                const { x: atlasX, y: atlasY, width: tileWidth, height: tileHeight } = this.getTileCoordinates(tileIndex);
 
                 // Tile aus Atlas in Pattern kopieren
                 ctx.drawImage(
@@ -153,6 +205,27 @@ class App {
                     atlasX, atlasY, tileWidth, tileHeight,
                     x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE
                 );
+
+                // Debug: Kachel-Ränder zeichnen
+                if (debugTileBorders) {
+                    ctx.strokeStyle = '#ff0000'; // Rote Ränder
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+                    // Optional: Tile-Index in der Ecke anzeigen
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '12px Arial';
+                    ctx.fillText(
+                        `${tileIndex}`,
+                        x * TILE_SIZE + 5,
+                        y * TILE_SIZE + 15
+                    );
+                    ctx.fillText(
+                        `(${x},${y})`,
+                        x * TILE_SIZE + 5,
+                        y * TILE_SIZE + 30
+                    );
+                }
             }
         }
 
@@ -168,42 +241,37 @@ class App {
         return texture;
     }
 
-    private getTileForPosition(x: number, y: number): number {
-        // Einfache Logik für verschiedene Tile-Typen basierend auf Position
-        // Hier kannst du komplexere Terrain-Generierung implementieren
+    private getTileCoordinates(tileName: string): TileCoordinates {
+        // Tile-Koordinaten aus der Atlas-Definition holen
+        const coords = this.TILE_ATLAS.tiles[tileName];
+        if (!coords) {
+            console.warn(`Tile '${tileName}' nicht gefunden, verwende Standard-Grass`);
+            return this.TILE_ATLAS.tiles[this.TILE_NAMES.GRASS];
+        }
+        return coords;
+    }
 
-        // Basis-Tiles definieren (0-11 entsprechend der 12 Tiles)
-        const GRASS = 0;           // grass
-        const GRASS_BUSHES = 1;    // grass mit grasbüscheln
-        const DIRT_GRASS_L = 2;    // links dirt, rechts grass
-        const GRASS_DIRT_R = 3;    // links grass, rechts dirt
-        const DIRT_GRASS_T = 4;    // unten dirt, oben grass
-        const DIRT_CORNER_TR = 5;  // spitze oben rechts dirt, rest grass
-        const GRASS_CORNER_BL = 6; // spitze unten links grass, rest dirt
-        const GRASS_CORNER_TL = 7; // spitze oben links grass, rest dirt
-        const WATER = 8;           // wasser
-        const DIRT = 9;            // dirt
-        const DIRT_STONES = 10;    // dirt mit steinen
-        const GRASS_BOX = 11;      // grass mit box
+    private getTileForPosition(x: number, y: number): string {
+        // Einfache Logik für verschiedene Tile-Typen basierend auf Position
+        // Hier können Sie komplexere Terrain-Generierung implementieren
 
         // Einfaches Muster für Demo
         const seed = (x * 7 + y * 13) % 100;
 
-        if (seed < 5) return WATER;
-        if (seed < 15) return DIRT;
-        if (seed < 20) return DIRT_STONES;
-        if (seed < 25) return GRASS_BOX;
-        if (seed < 35) return GRASS_BUSHES;
-        if (seed < 45) return DIRT_GRASS_L;
-        if (seed < 55) return GRASS_DIRT_R;
-        if (seed < 65) return DIRT_GRASS_T;
-        if (seed < 75) return DIRT_CORNER_TR;
-        if (seed < 85) return GRASS_CORNER_BL;
-        if (seed < 95) return GRASS_CORNER_TL;
+        if (seed < 5) return this.TILE_NAMES.WATER;
+        if (seed < 15) return this.TILE_NAMES.DIRT;
+        if (seed < 20) return this.TILE_NAMES.DIRT_STONES;
+        if (seed < 25) return this.TILE_NAMES.GRASS_BOX;
+        if (seed < 35) return this.TILE_NAMES.GRASS_BUSHES;
+        if (seed < 45) return this.TILE_NAMES.DIRT_GRASS_L;
+        if (seed < 55) return this.TILE_NAMES.GRASS_DIRT_R;
+        if (seed < 65) return this.TILE_NAMES.DIRT_GRASS_T;
+        if (seed < 75) return this.TILE_NAMES.DIRT_CORNER_TR;
+        if (seed < 85) return this.TILE_NAMES.GRASS_CORNER_BL;
+        if (seed < 95) return this.TILE_NAMES.GRASS_CORNER_TL;
 
-        return GRASS; // Standard: grass
+        return this.TILE_NAMES.GRASS; // Standard: grass
     }
-
     private createOpacityTexture(scene: Scene): Texture {
         const OPACITY_SIZE = 512;
         const FADE_DISTANCE = 0.1; // Fade-Bereich vom Rand (0.0 - 0.5)
