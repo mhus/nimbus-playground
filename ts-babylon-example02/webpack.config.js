@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   entry: './src/index.ts',
@@ -25,11 +26,25 @@ module.exports = {
       template: './src/index.html',
       title: 'Babylon.js TypeScript Example',
     }),
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: 'assets',
+          to: 'assets'
+        }
+      ],
+    }),
   ],
   devServer: {
-    static: {
-      directory: path.join(__dirname, 'dist'),
-    },
+    static: [
+      {
+        directory: path.join(__dirname, 'dist'),
+      },
+      {
+        directory: path.join(__dirname, 'assets'),
+        publicPath: '/assets',
+      }
+    ],
     compress: true,
     port: 3001,
     open: true,

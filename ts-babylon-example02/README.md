@@ -1,15 +1,33 @@
-# Babylon.js TypeScript Isometrische Gitterstruktur mit Pfeiltasten-Steuerung
+# Babylon.js TypeScript Isometrische Tile-Welt mit Pfeiltasten-Steuerung
 
-Eine 3D-Web-Applikation mit Babylon.js 8.0 und TypeScript, die eine scrollbare isometrische Gitterstruktur darstellt.
+Eine 3D-Web-Applikation mit Babylon.js 8.0 und TypeScript, die eine scrollbare isometrische Welt mit 12 verschiedenen Tile-Typen darstellt.
 
 ## Features
 
 - Isometrische Kamera-Perspektive (fixe Sicht)
-- Scrollbares Gitterraster mit Pfeiltasten-Steuerung
-- Unendliches Gitter durch nahtlose Textur-Wiederholung
-- Prozedural generierte Gitter-Textur
+- 12 verschiedene isometrische Tile-Typen aus Tile-Atlas
+- Scrollbares Terrain mit Pfeiltasten-Steuerung
+- Prozedural generierte Terrain-Verteilung
+- Rand-Fade-Effekt für nahtlose Übergänge
 - TypeScript für typsichere Entwicklung
 - Webpack-basiertes Build-System
+
+## Tile-Typen
+
+Das System verwendet 12 verschiedene isometrische Tiles:
+
+1. **Grass** - Einfaches Gras
+2. **Grass mit Büscheln** - Gras mit Grasbüscheln
+3. **Dirt-Grass Links** - Links Erde, rechts Gras
+4. **Grass-Dirt Rechts** - Links Gras, rechts Erde
+5. **Dirt-Grass Oben** - Unten Erde, oben Gras
+6. **Dirt-Ecke Oben-Rechts** - Spitze oben rechts Erde, Rest Gras
+7. **Grass-Ecke Unten-Links** - Spitze unten links Gras, Rest Erde
+8. **Grass-Ecke Oben-Links** - Spitze oben links Gras, Rest Erde
+9. **Wasser** - Wasser-Tile
+10. **Dirt** - Einfache Erde
+11. **Dirt mit Steinen** - Erde mit Steinen
+12. **Grass mit Box** - Gras mit Box/Objekt
 
 ## Installation
 

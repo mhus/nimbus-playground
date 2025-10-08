@@ -3,14 +3,20 @@ import { Engine, Scene, FreeCamera, Vector3, HemisphericLight, MeshBuilder, Stan
 class App {
     private canvas: HTMLCanvasElement;
     private engine: Engine;
-    private scene: Scene;
-    private tileMaterial!: StandardMaterial;  // Definitive Assignment Assertion
-    private tileTexture!: Texture;            // Definitive Assignment Assertion
+    private scene!: Scene;  // Definitive Assignment Assertion hinzufügen
+    private tileMaterial!: StandardMaterial;
+    private tileTexture!: Texture;
+    private tilesAtlasTexture!: Texture; // Neue Atlas-Textur für die 12 Tiles
 
     // Bewegungsparameter
     private offsetX: number = 0;
     private offsetY: number = 0;
-    private moveSpeed: number = 0.02;  // Langsamere Bewegung für bessere Kontrolle
+    private moveSpeed: number = 0.01;
+
+    // Tile-System Parameter
+    private readonly TILES_PER_ROW = 4;    // 4 Tiles pro Reihe in der Atlas-Textur
+    private readonly TILES_PER_COLUMN = 3; // 3 Reihen in der Atlas-Textur
+    private readonly TOTAL_TILES = 12;     // Insgesamt 12 verschiedene Tiles
 
     constructor() {
         // Canvas-Element aus dem DOM holen
@@ -19,8 +25,18 @@ class App {
         // Babylon.js Engine initialisieren
         this.engine = new Engine(this.canvas, true);
 
+        // Szene async erstellen
+        this.initializeScene();
+
+        // Window-Resize-Event behandeln
+        window.addEventListener('resize', () => {
+            this.engine.resize();
+        });
+    }
+
+    private async initializeScene(): Promise<void> {
         // Szene erstellen
-        this.scene = this.createScene();
+        this.scene = await this.createScene();
 
         // Keyboard-Events einrichten
         this.setupKeyboardControls();
@@ -29,14 +45,9 @@ class App {
         this.engine.runRenderLoop(() => {
             this.scene.render();
         });
-
-        // Window-Resize-Event behandeln
-        window.addEventListener('resize', () => {
-            this.engine.resize();
-        });
     }
 
-    private createScene(): Scene {
+    private async createScene(): Promise<Scene> {
         // Neue Szene erstellen
         const scene = new Scene(this.engine);
 
@@ -72,72 +83,125 @@ class App {
             subdivisions: GROUND_SUBDIVISIONS
         }, scene);
 
-        // Kachel-Material erstellen und speichern
-        this.tileMaterial = this.createTileMaterial(scene, TILE_REPEAT);
+        // Kachel-Material erstellen und speichern (async)
+        this.tileMaterial = await this.createTileMaterial(scene, TILE_REPEAT);
         ground.material = this.tileMaterial;
 
         return scene;
     }
 
-    private createTileMaterial(scene: Scene, tileRepeat: number): StandardMaterial {
+    private async createTileMaterial(scene: Scene, tileRepeat: number): Promise<StandardMaterial> {
         const material = new StandardMaterial('tileMaterial', scene);
 
-        // KONFIGURATION: Gitter-Details pro Kachel
-        const TEXTURE_SIZE = 256;        // Auflösung der Textur (höher = schärfer)
-        const GRID_DIVISIONS = 4;        // Anzahl Gitterlinien pro Kachel (4x4 Raster)
-        const GRID_COLOR = '#333333';    // Farbe der Gitterlinien
-        const BACKGROUND_COLOR = '#f0f0f0'; // Hintergrundfarbe der Kacheln
-        const LINE_WIDTH = 2;            // Dicke der Gitterlinien
+        // Atlas-Textur mit den 12 Tiles laden
+        this.tilesAtlasTexture = new Texture('./assets/tiles-textures.png', scene);
+        this.tilesAtlasTexture.wrapU = Texture.WRAP_ADDRESSMODE;
+        this.tilesAtlasTexture.wrapV = Texture.WRAP_ADDRESSMODE;
 
-        // Einfaches Kachel-Pattern mit Canvas erstellen
-        const canvas = document.createElement('canvas');
-        canvas.width = TEXTURE_SIZE;
-        canvas.height = TEXTURE_SIZE;
-        const ctx = canvas.getContext('2d')!;
-
-        // Hintergrund
-        ctx.fillStyle = BACKGROUND_COLOR;
-        ctx.fillRect(0, 0, TEXTURE_SIZE, TEXTURE_SIZE);
-
-        // Gitterlinien zeichnen
-        ctx.strokeStyle = GRID_COLOR;
-        ctx.lineWidth = LINE_WIDTH;
-
-        const gridSize = TEXTURE_SIZE / GRID_DIVISIONS;
-
-        // Vertikale Linien
-        for (let x = 0; x <= TEXTURE_SIZE; x += gridSize) {
-            ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, TEXTURE_SIZE);
-            ctx.stroke();
-        }
-
-        // Horizontale Linien
-        for (let y = 0; y <= TEXTURE_SIZE; y += gridSize) {
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(TEXTURE_SIZE, y);
-            ctx.stroke();
-        }
-
-        // Canvas als Textur verwenden (ohne Fade-Effekt)
-        this.tileTexture = new Texture('data:' + canvas.toDataURL(), scene);
-        this.tileTexture.uOffset = 0;
-        this.tileTexture.vOffset = 0;
-        this.tileTexture.uScale = tileRepeat;
-        this.tileTexture.vScale = tileRepeat;
-        this.tileTexture.wrapU = Texture.WRAP_ADDRESSMODE;
-        this.tileTexture.wrapV = Texture.WRAP_ADDRESSMODE;
+        // Warten bis Atlas geladen ist, dann Tile-Pattern erstellen
+        await new Promise<void>((resolve) => {
+            this.tilesAtlasTexture.onLoadObservable.addOnce(async () => {
+                this.tileTexture = await this.createTilePatternTexture(scene, tileRepeat);
+                resolve();
+            });
+        });
 
         material.diffuseTexture = this.tileTexture;
-        material.specularColor = Color3.Black(); // Keine Spiegelung
+        material.specularColor = Color3.Black();
 
         // Opacity-Textur für Rand-Fade erstellen
         const opacityTexture = this.createOpacityTexture(scene);
         material.opacityTexture = opacityTexture;
 
         return material;
+    }
+
+    private async createTilePatternTexture(scene: Scene, tileRepeat: number): Promise<Texture> {
+        const PATTERN_SIZE = 512;
+        const TILES_IN_PATTERN = tileRepeat;
+        const TILE_SIZE = PATTERN_SIZE / TILES_IN_PATTERN;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = PATTERN_SIZE;
+        canvas.height = PATTERN_SIZE;
+        const ctx = canvas.getContext('2d')!;
+
+        // Atlas-Image laden und warten bis es fertig ist
+        const atlasImage = new Image();
+        atlasImage.crossOrigin = 'anonymous';
+
+        await new Promise<void>((resolve, reject) => {
+            atlasImage.onload = () => resolve();
+            atlasImage.onerror = () => reject(new Error('Failed to load atlas image'));
+            atlasImage.src = './assets/tiles-textures.png';
+        });
+
+        const tileWidth = atlasImage.width / this.TILES_PER_ROW;
+        const tileHeight = atlasImage.height / this.TILES_PER_COLUMN;
+
+        // Tile-Pattern erstellen
+        for (let y = 0; y < TILES_IN_PATTERN; y++) {
+            for (let x = 0; x < TILES_IN_PATTERN; x++) {
+                // Tile-Typ für diese Position bestimmen
+                const tileIndex = this.getTileForPosition(x, y);
+                const atlasX = (tileIndex % this.TILES_PER_ROW) * tileWidth;
+                const atlasY = Math.floor(tileIndex / this.TILES_PER_ROW) * tileHeight;
+
+                // Tile aus Atlas in Pattern kopieren
+                ctx.drawImage(
+                    atlasImage,
+                    atlasX, atlasY, tileWidth, tileHeight,
+                    x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE
+                );
+            }
+        }
+
+        // Finale Textur erstellen
+        const texture = new Texture('data:' + canvas.toDataURL(), scene);
+        texture.uOffset = 0;
+        texture.vOffset = 0;
+        texture.uScale = 1;
+        texture.vScale = 1;
+        texture.wrapU = Texture.WRAP_ADDRESSMODE;
+        texture.wrapV = Texture.WRAP_ADDRESSMODE;
+
+        return texture;
+    }
+
+    private getTileForPosition(x: number, y: number): number {
+        // Einfache Logik für verschiedene Tile-Typen basierend auf Position
+        // Hier kannst du komplexere Terrain-Generierung implementieren
+
+        // Basis-Tiles definieren (0-11 entsprechend der 12 Tiles)
+        const GRASS = 0;           // grass
+        const GRASS_BUSHES = 1;    // grass mit grasbüscheln
+        const DIRT_GRASS_L = 2;    // links dirt, rechts grass
+        const GRASS_DIRT_R = 3;    // links grass, rechts dirt
+        const DIRT_GRASS_T = 4;    // unten dirt, oben grass
+        const DIRT_CORNER_TR = 5;  // spitze oben rechts dirt, rest grass
+        const GRASS_CORNER_BL = 6; // spitze unten links grass, rest dirt
+        const GRASS_CORNER_TL = 7; // spitze oben links grass, rest dirt
+        const WATER = 8;           // wasser
+        const DIRT = 9;            // dirt
+        const DIRT_STONES = 10;    // dirt mit steinen
+        const GRASS_BOX = 11;      // grass mit box
+
+        // Einfaches Muster für Demo
+        const seed = (x * 7 + y * 13) % 100;
+
+        if (seed < 5) return WATER;
+        if (seed < 15) return DIRT;
+        if (seed < 20) return DIRT_STONES;
+        if (seed < 25) return GRASS_BOX;
+        if (seed < 35) return GRASS_BUSHES;
+        if (seed < 45) return DIRT_GRASS_L;
+        if (seed < 55) return GRASS_DIRT_R;
+        if (seed < 65) return DIRT_GRASS_T;
+        if (seed < 75) return DIRT_CORNER_TR;
+        if (seed < 85) return GRASS_CORNER_BL;
+        if (seed < 95) return GRASS_CORNER_TL;
+
+        return GRASS; // Standard: grass
     }
 
     private createOpacityTexture(scene: Scene): Texture {
