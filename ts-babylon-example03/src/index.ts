@@ -338,7 +338,8 @@ class App {
     // Terrain-Update-System: Entkopplung von Animation und Rendering
     private terrainUpdateRequested: boolean = false;
     private lastTerrainUpdate: number = 0;
-    private readonly TERRAIN_UPDATE_THROTTLE = 100; // Minimum 100ms zwischen Updates
+    private readonly TERRAIN_UPDATE_THROTTLE = 200; // Erhöht auf 200ms für weniger Updates
+    private isUpdatingTerrain: boolean = false; // Flag um gleichzeitige Updates zu verhindern
 
     // KONFIGURATION: Zentrale Definition aller Konstanten
     private static readonly TILE_SIZE = 20; // Anzahl der lokal dargestellten Tiles in beide Richtungen
@@ -565,23 +566,60 @@ class App {
 
     /**
      * Aktualisiert die Terrain-Textur basierend auf der aktuellen Position
+     * Asynchrone Version um das Flimmern zu reduzieren
      */
-    private updateTerrainTexture(): void {
-        this.terrainRenderer.updateViewport(this.globalOffsetX, this.globalOffsetY);
-        const terrainCanvas = this.terrainRenderer.render();
-
-        // Neue Textur erstellen und alte ersetzen
-        if (this.tileTexture) {
-            this.tileTexture.dispose();
+    private async updateTerrainTexture(): Promise<void> {
+        // Verhindert gleichzeitige Updates
+        if (this.isUpdatingTerrain) {
+            return;
         }
+        this.isUpdatingTerrain = true;
 
-        this.tileTexture = new Texture('data:' + terrainCanvas.toDataURL(), this.scene);
-        this.tileTexture.wrapU = Texture.CLAMP_ADDRESSMODE;
-        this.tileTexture.wrapV = Texture.CLAMP_ADDRESSMODE;
+        try {
+            // Terrain im Hintergrund rendern
+            this.terrainRenderer.updateViewport(this.globalOffsetX, this.globalOffsetY);
+            const terrainCanvas = this.terrainRenderer.render();
 
-        if (this.tileMaterial) {
-            this.tileMaterial.diffuseTexture = this.tileTexture;
+            // Neue Textur asynchron erstellen
+            const newTexture = await this.createTextureFromCanvas(terrainCanvas);
+
+            // Atomarer Austausch: Alte Textur durch neue ersetzen
+            const oldTexture = this.tileTexture;
+            this.tileTexture = newTexture;
+
+            if (this.tileMaterial) {
+                this.tileMaterial.diffuseTexture = this.tileTexture;
+            }
+
+            // Alte Textur erst nach dem Austausch dispose
+            if (oldTexture) {
+                // Kurze Verzögerung um sicherzustellen dass die neue Textur aktiv ist
+                setTimeout(() => {
+                    oldTexture.dispose();
+                }, 50);
+            }
+        } catch (error) {
+            console.error('Fehler beim Terrain-Update:', error);
+        } finally {
+            this.isUpdatingTerrain = false;
         }
+    }
+
+    /**
+     * Erstellt eine Babylon.js Textur aus einem Canvas-Element
+     * Asynchrone Version für bessere Performance
+     */
+    private async createTextureFromCanvas(canvas: HTMLCanvasElement): Promise<Texture> {
+        return new Promise((resolve) => {
+            // Canvas zu Base64 konvertieren (kann bei großen Canvases Zeit dauern)
+            setTimeout(() => {
+                const dataUrl = canvas.toDataURL();
+                const texture = new Texture('data:' + dataUrl, this.scene);
+                texture.wrapU = Texture.CLAMP_ADDRESSMODE;
+                texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+                resolve(texture);
+            }, 0); // Gibt anderen Tasks die Chance zu laufen
+        });
     }
 
     private setupKeyboardControls(): void {
