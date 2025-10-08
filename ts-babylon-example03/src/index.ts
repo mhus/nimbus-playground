@@ -430,6 +430,7 @@ class App {
     private canvas: HTMLCanvasElement;
     private engine: Engine;
     private scene!: Scene;
+    private camera!: FreeCamera; // Kamera-Referenz hinzufügen
     private tileMaterial!: StandardMaterial;
     private tileTexture!: Texture;
     private tileProvider: TileProvider;
@@ -440,6 +441,10 @@ class App {
     private globalOffsetX: number = 100; // Start in der Mitte des großen Terrains
     private globalOffsetY: number = 100;
     private moveSpeed: number = 1; // In Tile-Einheiten pro Tastendruck
+
+    // Kamera-Rotationsparameter
+    private cameraRotationY: number = 0; // Rotation um die Y-Achse in Radiant
+    private cameraRotationSpeed: number = 0.02; // Rotationsgeschwindigkeit pro Frame
 
     // Terrain-Update-System: Entkopplung von Animation und Rendering
     private terrainUpdateRequested: boolean = false;
@@ -564,9 +569,9 @@ class App {
         const cameraX = App.CAMERA_DISTANCE * Math.cos(angleRad);
         const cameraZ = App.CAMERA_DISTANCE * Math.sin(angleRad);
 
-        const camera = new FreeCamera('camera', new Vector3(cameraX, App.CAMERA_HEIGHT, cameraZ), scene);
-        camera.setTarget(Vector3.Zero());
-        camera.inputs.clear();
+        this.camera = new FreeCamera('camera', new Vector3(cameraX, App.CAMERA_HEIGHT, cameraZ), scene);
+        this.camera.setTarget(Vector3.Zero());
+        this.camera.inputs.clear();
 
         // Licht hinzufügen
         const light = new HemisphericLight('light', new Vector3(0, 1, 0), scene);
@@ -745,29 +750,27 @@ class App {
             // Bewegungsgeschwindigkeit pro Frame
             const frameSpeed = App.TILE_SIZE * 0.02; // 2% der Tile-Größe pro Frame für flüssige Bewegung
 
-            // Isometrische Bewegungsrichtungen
+            // Kamera-relative Bewegungsrichtungen (Betrachter bewegt sich über die Ebene)
             if (keys['ArrowRight']) {
-                // "Oben" in isometrischer Sicht
-                this.globalOffsetX -= frameSpeed;
-                this.globalOffsetY -= frameSpeed;
+                // Rechts an der Kamera vorbei - Ebene bewegt sich nach links
+                this.globalOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
+                this.globalOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
                 moved = true;
             }
             if (keys['ArrowLeft']) {
-                // "Unten" in isometrischer Sicht
-                this.globalOffsetX += frameSpeed;
-                this.globalOffsetY += frameSpeed;
+                // Links an der Kamera vorbei - Ebene bewegt sich nach rechts
+                this.globalOffsetX += frameSpeed * Math.cos(this.cameraRotationY - Math.PI / 2);
+                this.globalOffsetY += frameSpeed * Math.sin(this.cameraRotationY - Math.PI / 2);
                 moved = true;
             }
             if (keys['ArrowDown']) {
-                // "Links" in isometrischer Sicht
-                this.globalOffsetX += frameSpeed;
-                this.globalOffsetY -= frameSpeed;
+                // Zur Kamera hin - Ebene bewegt sich von der Kamera weg
+                this.globalOffsetX += frameSpeed * Math.cos(this.cameraRotationY);
+                this.globalOffsetY += frameSpeed * Math.sin(this.cameraRotationY);
                 moved = true;
             }
             if (keys['ArrowUp']) {
-                // "Rechts" in isometrischer Sicht
-                this.globalOffsetX -= frameSpeed;
-                this.globalOffsetY += frameSpeed;
+                // Von der Kamera weg - Ebene bewegt sich zur Kamera hin
                 moved = true;
             }
 
@@ -781,6 +784,23 @@ class App {
 
                 // Terrain neu rendern
                 this.requestTerrainUpdate();
+            }
+
+            // Kamera-Rotation basierend auf Bewegung
+            if (this.camera) {
+                if (keys['KeyA']) {
+                    // Nach links drehen
+                    this.cameraRotationY -= this.cameraRotationSpeed;
+                }
+                if (keys['KeyD']) {
+                    // Nach rechts drehen
+                    this.cameraRotationY += this.cameraRotationSpeed;
+                }
+
+                // Kamera aktualisieren
+                this.camera.position.x = App.CAMERA_DISTANCE * Math.cos(this.cameraRotationY);
+                this.camera.position.z = App.CAMERA_DISTANCE * Math.sin(this.cameraRotationY);
+                this.camera.setTarget(Vector3.Zero());
             }
         });
     }

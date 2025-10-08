@@ -81,8 +81,14 @@ Darstellung ändern (z.B. wird der Inhalt durchsichtiger oder ein Tor geht auf).
 Also die sichtbaren kacheln sind eine Projektion auf eine grosse Fläche, besitzen
 also einen lokalen index und einen globalen index.
 
-Da sich kacheln überlagern können, müssen die kacheln von oben nach unten
+Da sich kacheln überlagern können, müssen die kacheln von unten nach oben
 gezeichnet werden.
+
+# Geht noch nicht !!!
+
+Das stimmt nicht. ueberdenke das nochmal. Ich steuere mich ueber die Ebene, ich moechte die 
+ebene also mit dem ArrowUp immer con der kamera weg bewegen. Mit ArrowDown zur kamera hin. 
+Mit ArrowLeft an der Kamera nach rechts vorbei und mit ArrowRight an der kammera vorbei nach links.
 
 # Spaeter
 
