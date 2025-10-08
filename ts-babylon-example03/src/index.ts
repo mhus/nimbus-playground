@@ -26,30 +26,49 @@ interface TileAtlas {
     tiles: { [key: string]: TileCoordinates }; // Tile-Definitionen
 }
 
-// TileProvider-Klasse
+// Viewport-Konfiguration für das sichtbare Terrain
+interface ViewportConfig {
+    viewportCenterX: number;  // Globale X-Koordinate des Viewport-Zentrums
+    viewportCenterY: number;  // Globale Y-Koordinate des Viewport-Zentrums
+    viewportWidth: number;    // Anzahl der sichtbaren Kacheln in X-Richtung
+    viewportHeight: number;   // Anzahl der sichtbaren Kacheln in Y-Richtung
+}
+
+// TileProvider-Klasse für das große Terrain
 class TileProvider {
-    private static readonly WORLD_SIZE = 50; // Konfigurierbare Ausdehnung des Arrays
-    private tileData: Tile[][];
+    private static readonly WORLD_SIZE = 1000; // Sehr großes Terrain (1000x1000)
+    private tileCache: Map<string, Tile>; // Cache für bereits generierte Tiles
 
     constructor() {
-        this.tileData = [];
-        this.generateTileData();
+        this.tileCache = new Map();
     }
 
-    private generateTileData(): void {
-        for (let x = 0; x < TileProvider.WORLD_SIZE; x++) {
-            this.tileData[x] = [];
-            for (let y = 0; y < TileProvider.WORLD_SIZE; y++) {
-                this.tileData[x][y] = this.generateRandomTile(x, y);
-            }
+    /**
+     * Holt ein Tile für die gegebenen globalen Koordinaten
+     * Verwendet Caching für bessere Performance
+     */
+    public getTile(globalX: number, globalY: number): Tile {
+        const key = `${globalX},${globalY}`;
+
+        // Aus Cache laden falls vorhanden
+        if (this.tileCache.has(key)) {
+            return this.tileCache.get(key)!;
         }
+
+        // Neues Tile generieren
+        const tile = this.generateTile(globalX, globalY);
+        this.tileCache.set(key, tile);
+        return tile;
     }
 
-    private generateRandomTile(x: number, y: number): Tile {
-        const textures = ['grass', 'dirt', 'water', 'grass_bushes'];
+    /**
+     * Generiert ein neues Tile basierend auf globalen Koordinaten
+     */
+    private generateTile(globalX: number, globalY: number): Tile {
+        // Deterministische Generierung basierend auf Koordinaten
+        const seed = this.hashCoordinates(globalX, globalY);
+        const random = this.seededRandom(seed);
 
-        // Einfache Logik für die Tile-Generierung
-        const random = Math.random();
         const levels: Level[] = [];
 
         // Basis-Level (0) immer vorhanden
@@ -62,20 +81,50 @@ class TileProvider {
         }
 
         // Gelegentlich ein zweites Level hinzufügen
-        if (Math.random() < 0.3) {
+        const secondRandom = this.seededRandom(seed + 1);
+        if (secondRandom < 0.3) {
             levels.push({ level: 1, texture: 'grass_bushes' });
         }
 
         return { levels };
     }
 
-    public getTile(x: number, y: number): Tile {
-        // Bounds-Checking
-        if (x < 0 || x >= TileProvider.WORLD_SIZE || y < 0 || y >= TileProvider.WORLD_SIZE) {
-            // Fallback für Koordinaten außerhalb des Arrays
-            return { levels: [{ level: 0, texture: 'grass' }] };
+    /**
+     * Hash-Funktion für deterministische Zufallszahlen
+     */
+    private hashCoordinates(x: number, y: number): number {
+        let hash = 0;
+        const str = `${x},${y}`;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
         }
-        return this.tileData[x][y];
+        return Math.abs(hash);
+    }
+
+    /**
+     * Seeded Random Generator für deterministische Zufallszahlen
+     */
+    private seededRandom(seed: number): number {
+        const x = Math.sin(seed) * 10000;
+        return x - Math.floor(x);
+    }
+
+    /**
+     * Prüft ob Koordinaten im gültigen Bereich sind
+     */
+    public isValidCoordinate(globalX: number, globalY: number): boolean {
+        return globalX >= 0 && globalX < TileProvider.WORLD_SIZE &&
+               globalY >= 0 && globalY < TileProvider.WORLD_SIZE;
+    }
+
+    /**
+     * Invalidiert Cache für ein Tile (für dynamische Änderungen)
+     */
+    public invalidateTile(globalX: number, globalY: number): void {
+        const key = `${globalX},${globalY}`;
+        this.tileCache.delete(key);
     }
 
     public getWorldSize(): number {
@@ -83,37 +132,238 @@ class TileProvider {
     }
 }
 
+// Terrain-Renderer für dynamisches Kachel-Rendering
+class TerrainRenderer {
+    private tileProvider: TileProvider;
+    private viewport: ViewportConfig;
+    private canvas: HTMLCanvasElement;
+    private ctx: CanvasRenderingContext2D;
+    private atlasImage: HTMLImageElement | null = null;
+    private tileAtlas: TileAtlas;
+    private tileSize: number;
+    private needsRedraw: boolean = true;
+
+    constructor(
+        tileProvider: TileProvider,
+        viewport: ViewportConfig,
+        tileAtlas: TileAtlas,
+        tileSize: number = 64
+    ) {
+        this.tileProvider = tileProvider;
+        this.viewport = viewport;
+        this.tileAtlas = tileAtlas;
+        this.tileSize = tileSize;
+
+        // Canvas für das Terrain erstellen
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = viewport.viewportWidth * tileSize;
+        this.canvas.height = viewport.viewportHeight * tileSize;
+        this.ctx = this.canvas.getContext('2d')!;
+    }
+
+    /**
+     * Lädt das Atlas-Image
+     */
+    public async loadAtlas(atlasPath: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.atlasImage = new Image();
+            this.atlasImage.crossOrigin = 'anonymous';
+            this.atlasImage.onload = () => {
+                this.needsRedraw = true;
+                resolve();
+            };
+            this.atlasImage.onerror = reject;
+            this.atlasImage.src = atlasPath;
+        });
+    }
+
+    /**
+     * Aktualisiert die Viewport-Position
+     */
+    public updateViewport(centerX: number, centerY: number): void {
+        if (this.viewport.viewportCenterX !== centerX || this.viewport.viewportCenterY !== centerY) {
+            this.viewport.viewportCenterX = centerX;
+            this.viewport.viewportCenterY = centerY;
+            this.needsRedraw = true;
+        }
+    }
+
+    /**
+     * Rendert das gesamte sichtbare Terrain
+     */
+    public render(): HTMLCanvasElement {
+        if (!this.needsRedraw || !this.atlasImage) {
+            return this.canvas;
+        }
+
+        // Canvas leeren
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Bereich der sichtbaren Tiles berechnen
+        const startX = Math.floor(this.viewport.viewportCenterX - this.viewport.viewportWidth / 2);
+        const startY = Math.floor(this.viewport.viewportCenterY - this.viewport.viewportHeight / 2);
+        const endX = startX + this.viewport.viewportWidth;
+        const endY = startY + this.viewport.viewportHeight;
+
+        // Tiles sammeln und nach Z-Order sortieren (von oben links nach unten rechts)
+        const tilesToRender: Array<{
+            globalX: number;
+            globalY: number;
+            localX: number;
+            localY: number;
+            tile: Tile;
+            zOrder: number;
+        }> = [];
+
+        for (let globalY = startY; globalY < endY; globalY++) {
+            for (let globalX = startX; globalX < endX; globalX++) {
+                if (this.tileProvider.isValidCoordinate(globalX, globalY)) {
+                    const tile = this.tileProvider.getTile(globalX, globalY);
+                    const localX = globalX - startX;
+                    const localY = globalY - startY;
+
+                    // Z-Order berechnen: höhere Y-Werte werden später gezeichnet (weiter vorne)
+                    // Bei gleichem Y werden höhere X-Werte später gezeichnet
+                    const zOrder = globalY * 10000 + globalX;
+
+                    tilesToRender.push({
+                        globalX,
+                        globalY,
+                        localX,
+                        localY,
+                        tile,
+                        zOrder
+                    });
+                }
+            }
+        }
+
+        // Nach Z-Order sortieren (von hinten nach vorne)
+        tilesToRender.sort((a, b) => a.zOrder - b.zOrder);
+
+        // Tiles zeichnen
+        for (const tileInfo of tilesToRender) {
+            this.drawTile(
+                tileInfo.tile,
+                tileInfo.localX,
+                tileInfo.localY,
+                tileInfo.globalX,
+                tileInfo.globalY
+            );
+        }
+
+        this.needsRedraw = false;
+        return this.canvas;
+    }
+
+    /**
+     * Zeichnet eine einzelne Kachel
+     */
+    private drawTile(
+        tile: Tile,
+        localX: number,
+        localY: number,
+        globalX: number,
+        globalY: number
+    ): void {
+        const tileX = localX * this.tileSize;
+        const tileY = localY * this.tileSize;
+
+        // Alle Level der Kachel durchgehen (sortiert nach Level)
+        const sortedLevels = [...tile.levels].sort((a, b) => a.level - b.level);
+
+        for (const level of sortedLevels) {
+            // Texture-Koordinaten für dieses Level holen
+            const coords = this.getTileCoordinates(level.texture);
+            if (!coords) continue;
+
+            const { x: atlasX, y: atlasY, width: tileWidth, height: tileHeight } = coords;
+
+            // Level-Offset berechnen (isometrischer 3D-Effekt)
+            const levelOffsetX = level.level * 2;
+            const levelOffsetY = level.level * -2;
+
+            // Tile aus Atlas zeichnen
+            this.ctx.drawImage(
+                this.atlasImage!,
+                atlasX, atlasY, tileWidth, tileHeight,
+                tileX + levelOffsetX,
+                tileY + levelOffsetY,
+                this.tileSize,
+                this.tileSize
+            );
+        }
+    }
+
+    /**
+     * Holt Tile-Koordinaten aus dem Atlas
+     */
+    private getTileCoordinates(textureName: string): TileCoordinates | null {
+        return this.tileAtlas.tiles[textureName] || null;
+    }
+
+    /**
+     * Forciert ein Neuzeichnen
+     */
+    public forceRedraw(): void {
+        this.needsRedraw = true;
+    }
+
+    /**
+     * Gibt die Canvas-Größe zurück
+     */
+    public getCanvasSize(): { width: number; height: number } {
+        return {
+            width: this.canvas.width,
+            height: this.canvas.height
+        };
+    }
+}
+
 class App {
     private canvas: HTMLCanvasElement;
     private engine: Engine;
-    private scene!: Scene;  // Definitive Assignment Assertion hinzufügen
+    private scene!: Scene;
     private tileMaterial!: StandardMaterial;
     private tileTexture!: Texture;
-    private tilesAtlasTexture!: Texture; // Neue Atlas-Textur für die 12 Tiles
-    private tileProvider: TileProvider; // TileProvider-Instanz hinzufügen
+    private tileProvider: TileProvider;
+    private terrainRenderer: TerrainRenderer;
+    private viewport: ViewportConfig;
 
     // Bewegungsparameter
-    private offsetX: number = 0;
-    private offsetY: number = 0;
-    private moveSpeed: number = 0.01;
+    private globalOffsetX: number = 500; // Start in der Mitte des großen Terrains
+    private globalOffsetY: number = 500;
+    private moveSpeed: number = 1; // In Tile-Einheiten pro Tastendruck
 
-    // Tile-System Parameter
-    private readonly TILES_PER_ROW = 5;    // 4 Tiles pro Reihe in der Atlas-Textur
-    private readonly TILES_PER_COLUMN = 3; // 3 Reihen in der Atlas-Textur
-    private readonly TOTAL_TILES = 15;     // Insgesamt 12 verschiedene Tiles
+    // KONFIGURATION: Zentrale Definition aller Konstanten
+    private static readonly TILE_SIZE = 20; // Anzahl der lokal dargestellten Tiles in beide Richtungen
 
-    // Tile-Atlas-Konfiguration - hier können Sie die Koordinaten manuell anpassen
+    // Kamera-Konstanten
+    private static readonly CAMERA_DISTANCE = 15;  // Entfernung der Kamera vom Zentrum
+    private static readonly CAMERA_HEIGHT = 8;     // Höhe der Kamera (flacher = niedriger Wert)
+    private static readonly CAMERA_ANGLE = 30;     // Winkel in Grad (0° = horizontal, 90° = von oben)
+
+    // Ground-Konstanten
+    private static readonly GROUND_SIZE = 20;          // Größe der Ebene (20x20 Einheiten)
+    private static readonly GROUND_SUBDIVISIONS = 30;  // Geometrie-Unterteilungen für glatte Darstellung
+    private static readonly DEBUG_TILE_BORDERS = false; // Debug: Kachel-Ränder sichtbar machen
+
+    // Opacity-Konstanten
+    private static readonly OPACITY_SIZE = 512;
+    private static readonly FADE_DISTANCE = 0.1; // Fade-Bereich vom Rand (0.0 - 0.5)
+
+    // Terrain-Renderer-Konstanten
+    private static readonly TILE_PIXEL_SIZE = 32; // Tile-Größe in Pixeln
+
+    // Tile-Atlas-Konfiguration
     private readonly TILE_ATLAS: TileAtlas = {
-        textureWidth: 512,   // Anpassen an Ihre Atlas-Größe
-        textureHeight: 384,  // Anpassen an Ihre Atlas-Größe
+        textureWidth: 512,
+        textureHeight: 384,
         tiles: {
-            // Beispiel-Koordinaten - passen Sie diese an Ihre Atlas-Textur an
             'grass_bushes': { x: 350, y: 0, width: 325, height: 225 },
-
             'grass': { x: 0, y: 275, width: 325, height: 325 },
             'dirt_l_grass_r': { x: 350, y: 275, width: 325, height: 325 },
             'dirt_lb_grass_ru': { x: 700, y: 275, width: 325, height: 325 },
-
             'dirt': { x: 0, y: 650, width: 128, height: 128 },
             'grass_l_dirt_r': { x: 350, y: 650, width: 325, height: 325 },
             'grass_lu_dirt_rb': { x: 700, y: 650, width: 325, height: 325 },
@@ -121,22 +371,6 @@ class App {
             'dirt_stones': { x: 700, y: 975, width: 128, height: 128 },
         }
     };
-
-    // Tile-Namen für einfache Referenzierung
-    private readonly TILE_NAMES = {
-        GRASS: 'grass',
-        GRASS_BUSHES: 'grass_bushes',
-        DIRT_GRASS_L: 'dirt_grass_l',
-        GRASS_DIRT_R: 'grass_dirt_r',
-        DIRT_GRASS_T: 'dirt_grass_t',
-        DIRT_CORNER_TR: 'dirt_corner_tr',
-        GRASS_CORNER_BL: 'grass_corner_bl',
-        GRASS_CORNER_TL: 'grass_corner_tl',
-        WATER: 'water',
-        DIRT: 'dirt',
-        DIRT_STONES: 'dirt_stones',
-        GRASS_BOX: 'grass_box'
-    } as const;
 
     constructor() {
         // Canvas-Element aus dem DOM holen
@@ -148,7 +382,23 @@ class App {
         // TileProvider initialisieren
         this.tileProvider = new TileProvider();
 
-        // Szene async erstellen
+        // Viewport-Konfiguration
+        this.viewport = {
+            viewportCenterX: this.globalOffsetX,
+            viewportCenterY: this.globalOffsetY,
+            viewportWidth: App.TILE_SIZE,   // Verwende TILE_SIZE für Breite
+            viewportHeight: App.TILE_SIZE   // Verwende TILE_SIZE für Höhe
+        };
+
+        // Terrain-Renderer initialisieren
+        this.terrainRenderer = new TerrainRenderer(
+            this.tileProvider,
+            this.viewport,
+            this.TILE_ATLAS,
+            App.TILE_PIXEL_SIZE // Tile-Größe in Pixeln
+        );
+
+        // Async Initialisierung
         this.initializeScene();
 
         // Window-Resize-Event behandeln
@@ -158,6 +408,9 @@ class App {
     }
 
     private async initializeScene(): Promise<void> {
+        // Atlas laden
+        await this.terrainRenderer.loadAtlas('/assets/textures.png');
+
         // Szene erstellen
         this.scene = await this.createScene();
 
@@ -174,195 +427,65 @@ class App {
         // Neue Szene erstellen
         const scene = new Scene(this.engine);
 
-        // KONFIGURATION: Kamera-Winkel und Position
-        const CAMERA_DISTANCE = 15;     // Entfernung der Kamera vom Zentrum
-        const CAMERA_HEIGHT = 8;        // Höhe der Kamera (flacher = niedriger Wert)
-        const CAMERA_ANGLE = 30;        // Winkel in Grad (0° = horizontal, 90° = von oben)
+        // Isometrische Kamera
+        const angleRad = (App.CAMERA_ANGLE * Math.PI) / 180;
+        const cameraX = App.CAMERA_DISTANCE * Math.cos(angleRad);
+        const cameraZ = App.CAMERA_DISTANCE * Math.sin(angleRad);
 
-        // Isometrische Kamera erstellen mit konfigurierbarem Winkel
-        const angleRad = (CAMERA_ANGLE * Math.PI) / 180; // Grad zu Radiant
-        const cameraX = CAMERA_DISTANCE * Math.cos(angleRad);
-        const cameraZ = CAMERA_DISTANCE * Math.sin(angleRad);
-
-        const camera = new FreeCamera('camera', new Vector3(cameraX, CAMERA_HEIGHT, cameraZ), scene);
+        const camera = new FreeCamera('camera', new Vector3(cameraX, App.CAMERA_HEIGHT, cameraZ), scene);
         camera.setTarget(Vector3.Zero());
-
-        // Kamera-Kontrollen deaktivieren für fixe isometrische Sicht
         camera.inputs.clear();
 
         // Licht hinzufügen
         const light = new HemisphericLight('light', new Vector3(0, 1, 0), scene);
         light.intensity = 0.8;
 
-        // KONFIGURATION: Größe der Ebene und Anzahl der Kacheln
-        const GROUND_SIZE = 20;          // Größe der Ebene (20x20 Einheiten)
-        const GROUND_SUBDIVISIONS = 30;  // Geometrie-Unterteilungen für glatte Darstellung
-        const TILE_REPEAT = 15;          // Anzahl der Kachel-Wiederholungen
-        const DEBUG_TILE_BORDERS = true; // Debug: Kachel-Ränder sichtbar machen
+        // KONFIGURATION: Größe der Ebene und andere Parameter
+        const GROUND_SIZE = App.GROUND_SIZE;          // Größe der Ebene (20x20 Einheiten)
+        const GROUND_SUBDIVISIONS = App.GROUND_SUBDIVISIONS;  // Geometrie-Unterteilungen für glatte Darstellung
+        const DEBUG_TILE_BORDERS = App.DEBUG_TILE_BORDERS; // Debug: Kachel-Ränder sichtbar machen
 
-        // Große Ebene für das Gitter erstellen
+        // Ebene erstellen
         const ground = MeshBuilder.CreateGround('ground', {
             width: GROUND_SIZE,
             height: GROUND_SIZE,
             subdivisions: GROUND_SUBDIVISIONS
         }, scene);
 
-        // Kachel-Material erstellen und speichern (async)
-        this.tileMaterial = await this.createTileMaterial(scene, TILE_REPEAT, DEBUG_TILE_BORDERS);
+        // Material mit dynamischer Textur erstellen
+        this.tileMaterial = await this.createDynamicTileMaterial(scene);
         ground.material = this.tileMaterial;
 
         return scene;
     }
 
-    private async createTileMaterial(scene: Scene, tileRepeat: number, debugTileBorders: boolean): Promise<StandardMaterial> {
+    private async createDynamicTileMaterial(scene: Scene): Promise<StandardMaterial> {
         const material = new StandardMaterial('tileMaterial', scene);
 
-        // Atlas-Textur mit den 12 Tiles laden - mit Cache-Busting
-        const cacheBuster = Date.now();
-        this.tilesAtlasTexture = new Texture(`/assets/textures.png?v=${cacheBuster}`, scene);
-        this.tilesAtlasTexture.wrapU = Texture.WRAP_ADDRESSMODE;
-        this.tilesAtlasTexture.wrapV = Texture.WRAP_ADDRESSMODE;
+        // Initiales Terrain rendern
+        const terrainCanvas = this.terrainRenderer.render();
 
-        // Warten bis Atlas geladen ist, dann Tile-Pattern erstellen
-        await new Promise<void>((resolve) => {
-            this.tilesAtlasTexture.onLoadObservable.addOnce(async () => {
-                this.tileTexture = await this.createTilePatternTexture(scene, tileRepeat, debugTileBorders);
-                resolve();
-            });
-        });
+        // Textur aus dem gerenderten Canvas erstellen
+        this.tileTexture = new Texture('data:' + terrainCanvas.toDataURL(), scene);
+        this.tileTexture.wrapU = Texture.CLAMP_ADDRESSMODE;
+        this.tileTexture.wrapV = Texture.CLAMP_ADDRESSMODE;
 
         material.diffuseTexture = this.tileTexture;
         material.specularColor = Color3.Black();
 
-        // Opacity-Textur für Rand-Fade erstellen
+        // Opacity-Textur für Rand-Fade hinzufügen
         const opacityTexture = this.createOpacityTexture(scene);
         material.opacityTexture = opacityTexture;
 
         return material;
     }
 
-    private async createTilePatternTexture(scene: Scene, tileRepeat: number, debugTileBorders: boolean = false): Promise<Texture> {
-        const PATTERN_SIZE = 512;
-        const TILES_IN_PATTERN = tileRepeat;
-        const TILE_SIZE = PATTERN_SIZE / TILES_IN_PATTERN;
-
-        const canvas = document.createElement('canvas');
-        canvas.width = PATTERN_SIZE;
-        canvas.height = PATTERN_SIZE;
-        const ctx = canvas.getContext('2d')!;
-
-        // Atlas-Image laden und warten bis es fertig ist
-        const atlasImage = new Image();
-        atlasImage.crossOrigin = 'anonymous';
-
-        // Cache-Busting für das Atlas-Image
-        const cacheBuster = Date.now();
-
-        await new Promise<void>((resolve, reject) => {
-            atlasImage.onload = () => resolve();
-            atlasImage.onerror = () => reject(new Error('Failed to load atlas image'));
-            atlasImage.src = `/assets/textures.png?v=${cacheBuster}`;
-        });
-
-        // Tile-Pattern erstellen
-        for (let y = 0; y < TILES_IN_PATTERN; y++) {
-            for (let x = 0; x < TILES_IN_PATTERN; x++) {
-                // Tile-Objekt vom TileProvider holen
-                const tile = this.tileProvider.getTile(x, y);
-
-                // Separate Methode zum Zeichnen der Kachel aufrufen
-                this.drawTile(tile, x, y, ctx, TILE_SIZE, atlasImage, debugTileBorders);
-            }
-        }
-
-        // Finale Textur erstellen
-        const texture = new Texture('data:' + canvas.toDataURL(), scene);
-        texture.uOffset = 0;
-        texture.vOffset = 0;
-        texture.uScale = 1;
-        texture.vScale = 1;
-        texture.wrapU = Texture.WRAP_ADDRESSMODE;
-        texture.wrapV = Texture.WRAP_ADDRESSMODE;
-
-        return texture;
-    }
-
     /**
-     * Zeichnet eine einzelne Kachel basierend auf dem Tile-Objekt
-     * @param tile Das Tile-Objekt mit den Level-Informationen
-     * @param x X-Koordinate der Kachel im Pattern
-     * @param y Y-Koordinate der Kachel im Pattern
-     * @param ctx Canvas-Context zum Zeichnen
-     * @param tileSize Größe der Kachel in Pixeln
-     * @param atlasImage Das geladene Atlas-Image
-     * @param debugTileBorders Ob Debug-Ränder gezeichnet werden sollen
+     * Erstellt eine Opacity-Textur für den Rand-Fade-Effekt
      */
-    private drawTile(
-        tile: Tile,
-        x: number,
-        y: number,
-        ctx: CanvasRenderingContext2D,
-        tileSize: number,
-        atlasImage: HTMLImageElement,
-        debugTileBorders: boolean
-    ): void {
-        const tileX = x * tileSize;
-        const tileY = y * tileSize;
-
-        // Alle Level der Kachel durchgehen (sortiert nach Level)
-        const sortedLevels = [...tile.levels].sort((a, b) => a.level - b.level);
-
-        for (const level of sortedLevels) {
-            // Texture-Koordinaten für dieses Level holen
-            const { x: atlasX, y: atlasY, width: tileWidth, height: tileHeight } = this.getTileCoordinates(level.texture);
-
-            // Level-Offset berechnen (höhere Level werden leicht versetzt gezeichnet für 3D-Effekt)
-            const levelOffsetX = level.level * 2; // Leichter Offset nach rechts
-            const levelOffsetY = level.level * -2; // Leichter Offset nach oben
-
-            // Tile aus Atlas in Pattern kopieren
-            ctx.drawImage(
-                atlasImage,
-                atlasX, atlasY, tileWidth, tileHeight,
-                tileX + levelOffsetX, tileY + levelOffsetY, tileSize, tileSize
-            );
-        }
-
-        // Debug: Kachel-Ränder und Informationen zeichnen
-        if (debugTileBorders) {
-            ctx.strokeStyle = '#ff0000'; // Rote Ränder
-            ctx.lineWidth = 2;
-            ctx.strokeRect(tileX, tileY, tileSize, tileSize);
-
-            // Tile-Informationen anzeigen
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '10px Arial';
-            ctx.fillText(`(${x},${y})`, tileX + 2, tileY + 12);
-
-            // Level-Informationen anzeigen
-            tile.levels.forEach((level, index) => {
-                ctx.fillText(
-                    `L${level.level}:${level.texture.substring(0, 5)}`,
-                    tileX + 2,
-                    tileY + 24 + (index * 12)
-                );
-            });
-        }
-    }
-
-    private getTileCoordinates(tileName: string): TileCoordinates {
-        // Tile-Koordinaten aus der Atlas-Definition holen
-        const coords = this.TILE_ATLAS.tiles[tileName];
-        if (!coords) {
-            console.warn(`Tile '${tileName}' nicht gefunden, verwende Standard-Grass`);
-            return this.TILE_ATLAS.tiles[this.TILE_NAMES.GRASS];
-        }
-        return coords;
-    }
-
     private createOpacityTexture(scene: Scene): Texture {
-        const OPACITY_SIZE = 512;
-        const FADE_DISTANCE = 0.1; // Fade-Bereich vom Rand (0.0 - 0.5)
+        const OPACITY_SIZE = App.OPACITY_SIZE;
+        const FADE_DISTANCE = App.FADE_DISTANCE; // Fade-Bereich vom Rand (0.0 - 0.5)
 
         const canvas = document.createElement('canvas');
         canvas.width = OPACITY_SIZE;
@@ -416,69 +539,86 @@ class App {
         return opacityTexture;
     }
 
-    private setupKeyboardControls(): void {
-        // Action Manager für Keyboard-Events
-        this.scene.actionManager = new ActionManager(this.scene);
+    /**
+     * Aktualisiert die Terrain-Textur basierend auf der aktuellen Position
+     */
+    private updateTerrainTexture(): void {
+        this.terrainRenderer.updateViewport(this.globalOffsetX, this.globalOffsetY);
+        const terrainCanvas = this.terrainRenderer.render();
 
-        // Keyboard-Event-Listener für kontinuierliche Bewegung
+        // Neue Textur erstellen und alte ersetzen
+        if (this.tileTexture) {
+            this.tileTexture.dispose();
+        }
+
+        this.tileTexture = new Texture('data:' + terrainCanvas.toDataURL(), this.scene);
+        this.tileTexture.wrapU = Texture.CLAMP_ADDRESSMODE;
+        this.tileTexture.wrapV = Texture.CLAMP_ADDRESSMODE;
+
+        if (this.tileMaterial) {
+            this.tileMaterial.diffuseTexture = this.tileTexture;
+        }
+    }
+
+    private setupKeyboardControls(): void {
+        // Keyboard-Event-Listener
         const keys: { [key: string]: boolean } = {};
 
-        // Key-Down Events
         window.addEventListener('keydown', (event) => {
-            keys[event.code] = true;
+            if (!keys[event.code]) {
+                keys[event.code] = true;
+                this.handleKeyPress(event.code);
+            }
         });
 
-        // Key-Up Events
         window.addEventListener('keyup', (event) => {
             keys[event.code] = false;
         });
-
-        // Kontinuierliche Bewegung im Render-Loop
-        this.scene.registerBeforeRender(() => {
-            let moved = false;
-
-            // Isometrische Bewegungsrichtungen (diagonal)
-            // In isometrischer Sicht entsprechen die Pfeiltasten diagonalen Bewegungen
-            const diagonalSpeed = this.moveSpeed * 0.707; // √2/2 für 45° Diagonale
-
-            // Pfeiltasten mit isometrischen Bewegungsrichtungen
-            if (keys['ArrowUp']) {
-                // "Oben" in isometrischer Sicht = diagonal nach links-unten
-                this.offsetX -= diagonalSpeed;
-                this.offsetY -= diagonalSpeed;
-                moved = true;
-            }
-            if (keys['ArrowDown']) {
-                // "Unten" in isometrischer Sicht = diagonal nach rechts-oben
-                this.offsetX += diagonalSpeed;
-                this.offsetY += diagonalSpeed;
-                moved = true;
-            }
-            if (keys['ArrowLeft']) {
-                // "Links" in isometrischer Sicht = diagonal nach links-oben
-                this.offsetX += diagonalSpeed;
-                this.offsetY -= diagonalSpeed;
-                moved = true;
-            }
-            if (keys['ArrowRight']) {
-                // "Rechts" in isometrischer Sicht = diagonal nach rechts-unten
-                this.offsetX -= diagonalSpeed;
-                this.offsetY += diagonalSpeed;
-                moved = true;
-            }
-
-            // Textur-Offsets aktualisieren falls bewegt wurde
-            if (moved) {
-                this.updateTextureOffsets();
-            }
-        });
     }
 
-    private updateTextureOffsets(): void {
-        if (this.tileTexture) {
-            // Wrap-around für nahtlose Wiederholung
-            this.tileTexture.uOffset = this.offsetX % 1;
-            this.tileTexture.vOffset = this.offsetY % 1;
+    private handleKeyPress(keyCode: string): void {
+        let moved = false;
+
+        // Isometrische Bewegungsrichtungen
+        switch (keyCode) {
+            case 'ArrowRight':
+                // "Oben" in isometrischer Sicht
+                this.globalOffsetX -= this.moveSpeed;
+                this.globalOffsetY -= this.moveSpeed;
+                moved = true;
+                break;
+            case 'ArrowLeft':
+                // "Unten" in isometrischer Sicht
+                this.globalOffsetX += this.moveSpeed;
+                this.globalOffsetY += this.moveSpeed;
+                moved = true;
+                break;
+            case 'ArrowDown':
+                // "Links" in isometrischer Sicht
+                this.globalOffsetX += this.moveSpeed;
+                this.globalOffsetY -= this.moveSpeed;
+                moved = true;
+                break;
+            case 'ArrowUp':
+                // "Rechts" in isometrischer Sicht
+                this.globalOffsetX -= this.moveSpeed;
+                this.globalOffsetY += this.moveSpeed;
+                moved = true;
+                break;
+        }
+
+        // Grenzen prüfen
+        if (moved) {
+            // Zentrale TILE_SIZE Konstante verwenden für korrekte Viewport-Grenzen
+            const halfTileSize = Math.ceil(App.TILE_SIZE / 2);
+
+            this.globalOffsetX = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetX));
+            this.globalOffsetY = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetY));
+
+            // Terrain neu rendern
+            this.updateTerrainTexture();
+
+            console.log(`Position: (${this.globalOffsetX}, ${this.globalOffsetY})`);
         }
     }
 }

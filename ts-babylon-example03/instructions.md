@@ -69,8 +69,20 @@ die Coordinaten der Kachel und ctx übergeben.
 
 # 05 Reorganisieren der Kacheln
 
+Das Zeichnen der Kacheln muss komplett anders gemacht werden.
+Es soll ein sehr grosses terrain dargestellt werden und die
+Kacheln sind immer nur ein Ausschnitt aus dem grossen terrain.
 
+das bedeutet die Kacheln koennen nicht am anfang einmal gezeichnet werden,
+sonden müssen, je nachdem was die Kachel gerade zeigen muss, neu gezeichnet 
+werden. Selbst wenn die Kacheln bereits gezeichnet wurden, kann sich die 
+Darstellung ändern (z.B. wird der Inhalt durchsichtiger oder ein Tor geht auf).
 
+Also die sichtbaren kacheln sind eine Projektion auf eine grosse Fläche, besitzen
+also einen lokalen index und einen globalen index.
+
+Da sich kacheln überlagern können, müssen die kacheln von oben nach unten
+gezeichnet werden.
 
 # Spaeter
 
