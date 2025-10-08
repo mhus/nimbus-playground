@@ -161,7 +161,8 @@ class TileProvider {
 
                     // Explizite Tiles aus JSON in den Cache laden
                     for (const [key, tileData] of Object.entries(terrainData.tiles)) {
-                        this.tileCache.set(key, { levels: tileData.levels });
+                        const typedTileData = tileData as { levels: Level[] };
+                        this.tileCache.set(key, { levels: typedTileData.levels });
                     }
                 }
 
@@ -455,9 +456,9 @@ class App {
     private static readonly CAMERA_ANGLE = 30;     // Winkel in Grad (0° = horizontal, 90° = von oben)
 
     // Ground-Konstanten
-    private static readonly GROUND_SIZE = 20;          // Größe der Ebene (20x20 Einheiten)
+    private static readonly GROUND_SIZE = 40;          // Größe der Ebene (20x20 Einheiten)
     private static readonly GROUND_SUBDIVISIONS = 30;  // Geometrie-Unterteilungen für glatte Darstellung
-    public static readonly DEBUG_TILE_BORDERS = true; // Debug: Kachel-Ränder sichtbar machen
+    public static readonly DEBUG_TILE_BORDERS = false; // Debug: Kachel-Ränder sichtbar machen
     public static readonly WORLD_SIZE = 200; // Sehr großes Terrain (1000x1000)
 
     // Opacity-Konstanten
@@ -549,7 +550,7 @@ class App {
                 this.updateTerrainTexture();
 
                 // Position loggen wenn Update stattfindet
-                console.log(`Terrain updated at position: (${Math.round(this.globalOffsetX)}, ${Math.round(this.globalOffsetY)})`);
+//                console.log(`Terrain updated at position: (${Math.round(this.globalOffsetX)}, ${Math.round(this.globalOffsetY)})`);
             }
         }, this.TERRAIN_UPDATE_THROTTLE);
     }
