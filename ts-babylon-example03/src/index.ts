@@ -335,6 +335,11 @@ class App {
     private globalOffsetY: number = 500;
     private moveSpeed: number = 1; // In Tile-Einheiten pro Tastendruck
 
+    // Terrain-Update-System: Entkopplung von Animation und Rendering
+    private terrainUpdateRequested: boolean = false;
+    private lastTerrainUpdate: number = 0;
+    private readonly TERRAIN_UPDATE_THROTTLE = 100; // Minimum 100ms zwischen Updates
+
     // KONFIGURATION: Zentrale Definition aller Konstanten
     private static readonly TILE_SIZE = 20; // Anzahl der lokal dargestellten Tiles in beide Richtungen
 
@@ -417,10 +422,29 @@ class App {
         // Keyboard-Events einrichten
         this.setupKeyboardControls();
 
+        // Separaten Timer für Terrain-Updates starten
+        this.startTerrainUpdateTimer();
+
         // Render-Loop starten
         this.engine.runRenderLoop(() => {
             this.scene.render();
         });
+    }
+
+    /**
+     * Startet einen separaten Timer für Terrain-Updates
+     * Entkoppelt von der Render-Loop für bessere Performance
+     */
+    private startTerrainUpdateTimer(): void {
+        setInterval(() => {
+            if (this.terrainUpdateRequested) {
+                this.terrainUpdateRequested = false;
+                this.updateTerrainTexture();
+
+                // Position loggen wenn Update stattfindet
+                console.log(`Terrain updated at position: (${Math.round(this.globalOffsetX)}, ${Math.round(this.globalOffsetY)})`);
+            }
+        }, this.TERRAIN_UPDATE_THROTTLE);
     }
 
     private async createScene(): Promise<Scene> {
@@ -561,65 +585,71 @@ class App {
     }
 
     private setupKeyboardControls(): void {
-        // Keyboard-Event-Listener
+        // Keyboard-Event-Listener für kontinuierliche Bewegung
         const keys: { [key: string]: boolean } = {};
 
+        // Key-Down Events
         window.addEventListener('keydown', (event) => {
-            if (!keys[event.code]) {
-                keys[event.code] = true;
-                this.handleKeyPress(event.code);
-            }
+            keys[event.code] = true;
         });
 
+        // Key-Up Events
         window.addEventListener('keyup', (event) => {
             keys[event.code] = false;
         });
+
+        // Kontinuierliche Bewegung im Render-Loop
+        this.scene.registerBeforeRender(() => {
+            let moved = false;
+
+            // Bewegungsgeschwindigkeit pro Frame
+            const frameSpeed = App.TILE_SIZE * 0.02; // 2% der Tile-Größe pro Frame für flüssige Bewegung
+
+            // Isometrische Bewegungsrichtungen
+            if (keys['ArrowRight']) {
+                // "Oben" in isometrischer Sicht
+                this.globalOffsetX -= frameSpeed;
+                this.globalOffsetY -= frameSpeed;
+                moved = true;
+            }
+            if (keys['ArrowLeft']) {
+                // "Unten" in isometrischer Sicht
+                this.globalOffsetX += frameSpeed;
+                this.globalOffsetY += frameSpeed;
+                moved = true;
+            }
+            if (keys['ArrowDown']) {
+                // "Links" in isometrischer Sicht
+                this.globalOffsetX += frameSpeed;
+                this.globalOffsetY -= frameSpeed;
+                moved = true;
+            }
+            if (keys['ArrowUp']) {
+                // "Rechts" in isometrischer Sicht
+                this.globalOffsetX -= frameSpeed;
+                this.globalOffsetY += frameSpeed;
+                moved = true;
+            }
+
+            // Grenzen prüfen und Terrain aktualisieren falls bewegt
+            if (moved) {
+                // Zentrale TILE_SIZE Konstante verwenden für korrekte Viewport-Grenzen
+                const halfTileSize = Math.ceil(App.TILE_SIZE / 2);
+
+                this.globalOffsetX = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetX));
+                this.globalOffsetY = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetY));
+
+                // Terrain neu rendern
+                this.requestTerrainUpdate();
+            }
+        });
     }
 
-    private handleKeyPress(keyCode: string): void {
-        let moved = false;
-
-        // Isometrische Bewegungsrichtungen
-        switch (keyCode) {
-            case 'ArrowRight':
-                // "Oben" in isometrischer Sicht
-                this.globalOffsetX -= this.moveSpeed;
-                this.globalOffsetY -= this.moveSpeed;
-                moved = true;
-                break;
-            case 'ArrowLeft':
-                // "Unten" in isometrischer Sicht
-                this.globalOffsetX += this.moveSpeed;
-                this.globalOffsetY += this.moveSpeed;
-                moved = true;
-                break;
-            case 'ArrowDown':
-                // "Links" in isometrischer Sicht
-                this.globalOffsetX += this.moveSpeed;
-                this.globalOffsetY -= this.moveSpeed;
-                moved = true;
-                break;
-            case 'ArrowUp':
-                // "Rechts" in isometrischer Sicht
-                this.globalOffsetX -= this.moveSpeed;
-                this.globalOffsetY += this.moveSpeed;
-                moved = true;
-                break;
-        }
-
-        // Grenzen prüfen
-        if (moved) {
-            // Zentrale TILE_SIZE Konstante verwenden für korrekte Viewport-Grenzen
-            const halfTileSize = Math.ceil(App.TILE_SIZE / 2);
-
-            this.globalOffsetX = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetX));
-            this.globalOffsetY = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetY));
-
-            // Terrain neu rendern
-            this.updateTerrainTexture();
-
-            console.log(`Position: (${this.globalOffsetX}, ${this.globalOffsetY})`);
-        }
+    /**
+     * Fordert ein Terrain-Update an (entkoppelt vom Rendering)
+     */
+    private requestTerrainUpdate(): void {
+        this.terrainUpdateRequested = true;
     }
 }
 
