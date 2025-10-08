@@ -27,7 +27,7 @@ werden. Sortiert von links nach rechts und dann von oben nach unten:
 Die tiles sind isometrisch und können auf die Kacheln
 als Textur gelegt werden.
 
-#03 Tile provider
+# 03 Tile provider
 
 Was auf einer Kachen angezeigt werden soll, soll aus einem
 TileProvider gelesen werden. Der TileProvider hat erstmal 
@@ -59,7 +59,20 @@ Tile {
 
 
 
-#04 Level und Boxen
+# 04 Texturen zu isometrisch verzogenen Boxen
+
+Das Erstellen einer Kachel wird komplexer als gedacht.
+Deshalb soll das Zeichnen der Kacheln in einer separaten
+Methode erfolgen. Der Methode wird das Tile objekt,
+die Coordinaten der Kachel und ctx übergeben. 
+
+
+# 05 Reorganisieren der Kacheln
+
+
+
+
+# Spaeter
 
 Da tiles dargestellt werden sollen, muessen die Kacheln
 als Boxen dargestellt werden die gestapelt, bzw. auf verschiedenen

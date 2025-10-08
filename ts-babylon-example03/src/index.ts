@@ -198,7 +198,7 @@ class App {
         const GROUND_SIZE = 20;          // Größe der Ebene (20x20 Einheiten)
         const GROUND_SUBDIVISIONS = 30;  // Geometrie-Unterteilungen für glatte Darstellung
         const TILE_REPEAT = 15;          // Anzahl der Kachel-Wiederholungen
-        const DEBUG_TILE_BORDERS = false; // Debug: Kachel-Ränder sichtbar machen
+        const DEBUG_TILE_BORDERS = true; // Debug: Kachel-Ränder sichtbar machen
 
         // Große Ebene für das Gitter erstellen
         const ground = MeshBuilder.CreateGround('ground', {
@@ -267,37 +267,11 @@ class App {
         // Tile-Pattern erstellen
         for (let y = 0; y < TILES_IN_PATTERN; y++) {
             for (let x = 0; x < TILES_IN_PATTERN; x++) {
-                // Tile-Typ für diese Position bestimmen
-                const tileIndex = this.getTileForPosition(x, y);
-                const { x: atlasX, y: atlasY, width: tileWidth, height: tileHeight } = this.getTileCoordinates(tileIndex);
+                // Tile-Objekt vom TileProvider holen
+                const tile = this.tileProvider.getTile(x, y);
 
-                // Tile aus Atlas in Pattern kopieren
-                ctx.drawImage(
-                    atlasImage,
-                    atlasX, atlasY, tileWidth, tileHeight,
-                    x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE
-                );
-
-                // Debug: Kachel-Ränder zeichnen
-                if (debugTileBorders) {
-                    ctx.strokeStyle = '#ff0000'; // Rote Ränder
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-
-                    // Optional: Tile-Index in der Ecke anzeigen
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = '12px Arial';
-                    ctx.fillText(
-                        `${tileIndex}`,
-                        x * TILE_SIZE + 5,
-                        y * TILE_SIZE + 15
-                    );
-                    ctx.fillText(
-                        `(${x},${y})`,
-                        x * TILE_SIZE + 5,
-                        y * TILE_SIZE + 30
-                    );
-                }
+                // Separate Methode zum Zeichnen der Kachel aufrufen
+                this.drawTile(tile, x, y, ctx, TILE_SIZE, atlasImage, debugTileBorders);
             }
         }
 
@@ -313,6 +287,69 @@ class App {
         return texture;
     }
 
+    /**
+     * Zeichnet eine einzelne Kachel basierend auf dem Tile-Objekt
+     * @param tile Das Tile-Objekt mit den Level-Informationen
+     * @param x X-Koordinate der Kachel im Pattern
+     * @param y Y-Koordinate der Kachel im Pattern
+     * @param ctx Canvas-Context zum Zeichnen
+     * @param tileSize Größe der Kachel in Pixeln
+     * @param atlasImage Das geladene Atlas-Image
+     * @param debugTileBorders Ob Debug-Ränder gezeichnet werden sollen
+     */
+    private drawTile(
+        tile: Tile,
+        x: number,
+        y: number,
+        ctx: CanvasRenderingContext2D,
+        tileSize: number,
+        atlasImage: HTMLImageElement,
+        debugTileBorders: boolean
+    ): void {
+        const tileX = x * tileSize;
+        const tileY = y * tileSize;
+
+        // Alle Level der Kachel durchgehen (sortiert nach Level)
+        const sortedLevels = [...tile.levels].sort((a, b) => a.level - b.level);
+
+        for (const level of sortedLevels) {
+            // Texture-Koordinaten für dieses Level holen
+            const { x: atlasX, y: atlasY, width: tileWidth, height: tileHeight } = this.getTileCoordinates(level.texture);
+
+            // Level-Offset berechnen (höhere Level werden leicht versetzt gezeichnet für 3D-Effekt)
+            const levelOffsetX = level.level * 2; // Leichter Offset nach rechts
+            const levelOffsetY = level.level * -2; // Leichter Offset nach oben
+
+            // Tile aus Atlas in Pattern kopieren
+            ctx.drawImage(
+                atlasImage,
+                atlasX, atlasY, tileWidth, tileHeight,
+                tileX + levelOffsetX, tileY + levelOffsetY, tileSize, tileSize
+            );
+        }
+
+        // Debug: Kachel-Ränder und Informationen zeichnen
+        if (debugTileBorders) {
+            ctx.strokeStyle = '#ff0000'; // Rote Ränder
+            ctx.lineWidth = 2;
+            ctx.strokeRect(tileX, tileY, tileSize, tileSize);
+
+            // Tile-Informationen anzeigen
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '10px Arial';
+            ctx.fillText(`(${x},${y})`, tileX + 2, tileY + 12);
+
+            // Level-Informationen anzeigen
+            tile.levels.forEach((level, index) => {
+                ctx.fillText(
+                    `L${level.level}:${level.texture.substring(0, 5)}`,
+                    tileX + 2,
+                    tileY + 24 + (index * 12)
+                );
+            });
+        }
+    }
+
     private getTileCoordinates(tileName: string): TileCoordinates {
         // Tile-Koordinaten aus der Atlas-Definition holen
         const coords = this.TILE_ATLAS.tiles[tileName];
@@ -323,18 +360,6 @@ class App {
         return coords;
     }
 
-    private getTileForPosition(x: number, y: number): string {
-        // TileProvider verwenden um Tile-Daten zu erhalten
-        const tile = this.tileProvider.getTile(x, y);
-
-        // Nur das erste Level verwenden (Level 0)
-        if (tile.levels.length > 0) {
-            return tile.levels[0].texture;
-        }
-
-        // Fallback auf Grass falls keine Level vorhanden
-        return this.TILE_NAMES.GRASS;
-    }
     private createOpacityTexture(scene: Scene): Texture {
         const OPACITY_SIZE = 512;
         const FADE_DISTANCE = 0.1; // Fade-Bereich vom Rand (0.0 - 0.5)
