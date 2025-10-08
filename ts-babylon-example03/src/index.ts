@@ -42,231 +42,146 @@ interface BiomeInfo {
     name: string;                  // Name des Bioms für Vergleiche
 }
 
+// Terrain-Daten-Interface für JSON-Serialisierung
+interface TerrainData {
+    version: string;
+    worldSize: number;
+    metadata: {
+        name: string;
+        description: string;
+        created: string;
+        author?: string;
+    };
+    tiles: {
+        [key: string]: {
+            levels: Level[];
+        };
+    };
+    features: {
+        lakes: Array<{ x: number; y: number; radius: number; name?: string }>;
+        rivers: Array<{
+            from: { x: number; y: number };
+            to: { x: number; y: number };
+            width: number;
+            curved?: boolean;
+            name?: string;
+        }>;
+        deserts: Array<{ x: number; y: number; width: number; height: number; name?: string }>;
+    };
+}
+
 // TileProvider-Klasse für das große Terrain
 class TileProvider {
-    private static readonly WORLD_SIZE = 1000; // Sehr großes Terrain (1000x1000)
     private tileCache: Map<string, Tile>; // Cache für bereits generierte Tiles
+    private isGenerated: boolean = false; // Flag ob Terrain bereits generiert wurde
 
     constructor() {
         this.tileCache = new Map();
     }
 
     /**
-     * Holt ein Tile für die gegebenen globalen Koordinaten
-     * Verwendet Caching für bessere Performance
+     * Generiert das gesamte Terrain beim Start und lädt es in den Cache
+     * Diese Methode sollte einmal beim Start aufgerufen werden
+     * Versucht zuerst JSON zu laden, falls verfügbar
+     */
+    public async generateAllTerrain(jsonPath?: string): Promise<void> {
+        if (this.isGenerated) {
+            console.log('Terrain bereits generiert');
+            return;
+        }
+
+        // Versuche zuerst JSON zu laden
+        if (jsonPath) {
+            try {
+                await this.loadTerrainFromJson(jsonPath);
+                console.log('JSON-Terrain erfolgreich geladen');
+                this.isGenerated = true;
+                return;
+            } catch (error) {
+                console.warn('JSON-Terrain konnte nicht geladen werden, verwende prozedurales Terrain:', error);
+            }
+        }
+
+    }
+
+    /**
+     * Holt ein Tile für die gegebenen globalen Koordinaten aus dem Cache
+     * Das Terrain muss vorher mit generateAllTerrain() generiert worden sein
      */
     public getTile(globalX: number, globalY: number): Tile {
+        if (!this.isGenerated) {
+            throw new Error('Terrain wurde noch nicht generiert! Rufen Sie zuerst generateAllTerrain() auf.');
+        }
+
         const key = `${globalX},${globalY}`;
+        const tile = this.tileCache.get(key);
 
-        // Aus Cache laden falls vorhanden
-        if (this.tileCache.has(key)) {
-            return this.tileCache.get(key)!;
+        if (!tile) {
+            // Fallback: Ungültige Koordinaten oder Fehler
+            console.warn(`Tile nicht gefunden für Koordinaten (${globalX}, ${globalY})`);
+            return this.createEmptyTile();
         }
 
-        // Neues Tile generieren
-        const tile = this.generateTile(globalX, globalY);
-        this.tileCache.set(key, tile);
         return tile;
-    }
-
-    /**
-     * Generiert ein neues Tile basierend auf globalen Koordinaten
-     * Verwendet Perlin-Noise-ähnliche Funktionen für realistische Terrains
-     */
-    private generateTile(globalX: number, globalY: number): Tile {
-        const levels: Level[] = [];
-
-        // Multi-Oktaven Noise für verschiedene Terrain-Features
-        const elevationNoise = this.multiOctaveNoise(globalX, globalY, 4, 0.01, 0.5); // Grosse Höhenunterschiede
-        const moistureNoise = this.multiOctaveNoise(globalX + 1000, globalY + 1000, 3, 0.02, 0.6); // Feuchtigkeit
-        const temperatureNoise = this.multiOctaveNoise(globalX + 2000, globalY + 2000, 2, 0.015, 0.4); // Temperatur
-        const detailNoise = this.multiOctaveNoise(globalX + 3000, globalY + 3000, 6, 0.05, 0.3); // Details
-
-        // Normalisiere Werte auf 0-1 Bereich
-        const elevation = Math.max(0, Math.min(1, (elevationNoise + 1) / 2));
-        const moisture = Math.max(0, Math.min(1, (moistureNoise + 1) / 2));
-        const temperature = Math.max(0, Math.min(1, (temperatureNoise + 1) / 2));
-        const detail = Math.max(0, Math.min(1, (detailNoise + 1) / 2));
-
-        // Biom-Bestimmung basierend auf Höhe, Feuchtigkeit und Temperatur
-        const biome = this.determineBiome(elevation, moisture, temperature);
-
-        // Basis-Level (0) basierend auf Biom
-        levels.push({ level: 0, texture: biome.baseTexture });
-
-        // Vegetations-/Detail-Level hinzufügen basierend auf Biom und Detail-Noise
-        if (detail > biome.vegetationThreshold) {
-            if (biome.vegetationTexture) {
-                levels.push({ level: 1, texture: biome.vegetationTexture });
-            }
-        }
-
-        // Gelegentlich Steine oder andere Details bei hoher Elevation
-        if (elevation > 0.7 && detail > 0.8) {
-            levels.push({ level: 1, texture: 'dirt_stones' });
-        }
-
-        return { levels };
-    }
-
-    /**
-     * Multi-Oktaven Noise Generator für natürlichere Terrain-Features
-     */
-    private multiOctaveNoise(x: number, y: number, octaves: number, frequency: number, persistence: number): number {
-        let value = 0;
-        let amplitude = 1;
-        let totalAmplitude = 0;
-        let currentFrequency = frequency;
-
-        for (let i = 0; i < octaves; i++) {
-            value += this.simpleNoise(x * currentFrequency, y * currentFrequency) * amplitude;
-            totalAmplitude += amplitude;
-            amplitude *= persistence;
-            currentFrequency *= 2;
-        }
-
-        return value / totalAmplitude;
-    }
-
-    /**
-     * Einfache Noise-Funktion basierend auf Koordinaten
-     */
-    private simpleNoise(x: number, y: number): number {
-        // Pseudo-Perlin Noise Implementierung
-        const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
-        return 2 * (n - Math.floor(n)) - 1; // Werte zwischen -1 und 1
-    }
-
-    /**
-     * Bestimmt das Biom basierend auf Umwelt-Parametern
-     */
-    private determineBiome(elevation: number, moisture: number, temperature: number): BiomeInfo {
-        // Wasser bei sehr niedriger Elevation
-        if (elevation < 0.25) {
-            return {
-                baseTexture: 'water',
-                vegetationTexture: null,
-                vegetationThreshold: 1.0, // Keine Vegetation im Wasser
-                name: 'water'
-            };
-        }
-
-        // Gebirge bei sehr hoher Elevation
-        if (elevation > 0.8) {
-            return {
-                baseTexture: 'dirt',
-                vegetationTexture: 'dirt_stones',
-                vegetationThreshold: 0.6,
-                name: 'mountain'
-            };
-        }
-
-        // Biom-Matrix basierend auf Feuchtigkeit und Temperatur
-        if (temperature > 0.6) { // Warm
-            if (moisture > 0.6) {
-                // Tropisch
-                return {
-                    baseTexture: 'grass',
-                    vegetationTexture: 'grass_bushes',
-                    vegetationThreshold: 0.4,
-                    name: 'tropical'
-                };
-            } else if (moisture > 0.3) {
-                // Savanne
-                return {
-                    baseTexture: 'grass',
-                    vegetationTexture: 'grass_bushes',
-                    vegetationThreshold: 0.7,
-                    name: 'savanna'
-                };
-            } else {
-                // Wüste
-                return {
-                    baseTexture: 'dirt',
-                    vegetationTexture: null,
-                    vegetationThreshold: 0.9,
-                    name: 'desert'
-                };
-            }
-        } else if (temperature > 0.3) { // Gemäßigt
-            if (moisture > 0.5) {
-                // Wald
-                return {
-                    baseTexture: 'grass',
-                    vegetationTexture: 'grass_bushes',
-                    vegetationThreshold: 0.3,
-                    name: 'forest'
-                };
-            } else {
-                // Grassland
-                return {
-                    baseTexture: 'grass',
-                    vegetationTexture: 'grass_bushes',
-                    vegetationThreshold: 0.6,
-                    name: 'grassland'
-                };
-            }
-        } else { // Kalt
-            if (moisture > 0.4) {
-                // Taiga
-                return {
-                    baseTexture: 'dirt',
-                    vegetationTexture: 'grass_bushes',
-                    vegetationThreshold: 0.5,
-                    name: 'taiga'
-                };
-            } else {
-                // Tundra
-                return {
-                    baseTexture: 'dirt',
-                    vegetationTexture: null,
-                    vegetationThreshold: 0.8,
-                    name: 'tundra'
-                };
-            }
-        }
-    }
-
-    /**
-     * Hash-Funktion für deterministische Zufallszahlen
-     */
-    private hashCoordinates(x: number, y: number): number {
-        let hash = 0;
-        const str = `${x},${y}`;
-        for (let i = 0; i < str.length; i++) {
-            const char = str.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash; // Convert to 32bit integer
-        }
-        return Math.abs(hash);
-    }
-
-    /**
-     * Seeded Random Generator für deterministische Zufallszahlen
-     */
-    private seededRandom(seed: number): number {
-        const x = Math.sin(seed) * 10000;
-        return x - Math.floor(x);
     }
 
     /**
      * Prüft ob Koordinaten im gültigen Bereich sind
      */
     public isValidCoordinate(globalX: number, globalY: number): boolean {
-        return globalX >= 0 && globalX < TileProvider.WORLD_SIZE &&
-               globalY >= 0 && globalY < TileProvider.WORLD_SIZE;
+        return globalX >= 0 && globalX < App.WORLD_SIZE &&
+               globalY >= 0 && globalY < App.WORLD_SIZE;
     }
 
     /**
-     * Invalidiert Cache für ein Tile (für dynamische Änderungen)
+     * Lädt Terrain-Daten aus einer JSON-Datei
      */
-    public invalidateTile(globalX: number, globalY: number): void {
-        const key = `${globalX},${globalY}`;
-        this.tileCache.delete(key);
+    public async loadTerrainFromJson(jsonPath: string): Promise<void> {
+        try {
+            console.log(`Lade Terrain aus JSON: ${jsonPath}`);
+            const response = await fetch(jsonPath);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            var terrainData = await response.json();
+
+            if (terrainData) {
+                console.log(`Terrain geladen: "${terrainData.metadata.name}"`);
+                console.log(`Beschreibung: ${terrainData.metadata.description}`);
+                console.log(`Weltgröße: ${terrainData.worldSize}x${terrainData.worldSize}`);
+                console.log(`Features: ${terrainData.features.lakes.length} Seen, ${terrainData.features.rivers.length} Flüsse, ${terrainData.features.deserts.length} Wüsten`);
+            }
+
+                if (terrainData != null) {
+                    // JSON-Terrain-Daten in den Cache schreiben
+                    console.log('Schreibe JSON-Terrain-Daten in den Cache...');
+                    const startTime = performance.now();
+
+                    // Explizite Tiles aus JSON in den Cache laden
+                    for (const [key, tileData] of Object.entries(terrainData.tiles)) {
+                        this.tileCache.set(key, { levels: tileData.levels });
+                    }
+                }
+
+        } catch (error) {
+            console.error('Fehler beim Laden der Terrain-JSON:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Erstellt ein leeres Tile als Fallback
+     */
+    private createEmptyTile(): Tile {
+        return {
+            levels: [{ level: 0, texture: 'dirt' }]
+        };
     }
 
     public getWorldSize(): number {
-        return TileProvider.WORLD_SIZE;
+        return App.WORLD_SIZE;
     }
 }
 
@@ -390,6 +305,10 @@ class TerrainRenderer {
             );
         }
 
+        // Debug: Tile-Ränder und Koordinaten zeichnen wenn aktiviert
+        if (App.DEBUG_TILE_BORDERS) {
+            this.drawDebugOverlay(tilesToRender);
+        }
         this.needsRedraw = false;
         return this.canvas;
     }
@@ -406,6 +325,12 @@ class TerrainRenderer {
     ): void {
         const tileX = localX * this.tileSize;
         const tileY = localY * this.tileSize;
+
+        // Sicherheitsprüfung für tile.levels
+        if (!tile || !tile.levels || tile.levels.length === 0) {
+            console.warn(`Ungültiges Tile an Position (${globalX}, ${globalY}):`, tile);
+            return;
+        }
 
         // Alle Level der Kachel durchgehen (sortiert nach Level)
         const sortedLevels = [...tile.levels].sort((a, b) => a.level - b.level);
@@ -456,6 +381,48 @@ class TerrainRenderer {
             height: this.canvas.height
         };
     }
+
+    /**
+     * Zeichnet Debug-Overlay mit Tile-Rändern und Koordinaten
+     */
+    private drawDebugOverlay(tilesToRender: Array<{
+        globalX: number;
+        globalY: number;
+        localX: number;
+        localY: number;
+        tile: Tile;
+        zOrder: number;
+    }>): void {
+
+        // Canvas-Kontext für Debug-Zeichnung vorbereiten
+        this.ctx.strokeStyle = 'red';
+        this.ctx.lineWidth = 2;
+        this.ctx.fillStyle = 'red';
+        this.ctx.font = '12px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+
+        for (const tileInfo of tilesToRender) {
+            const tileX = tileInfo.localX * this.tileSize;
+            const tileY = tileInfo.localY * this.tileSize;
+
+            // Roten Rahmen um das Tile zeichnen
+            this.ctx.strokeRect(tileX, tileY, this.tileSize, this.tileSize);
+
+            // Koordinaten in die Mitte des Tiles schreiben
+            const centerX = tileX + this.tileSize / 2;
+            const centerY = tileY + this.tileSize / 2;
+
+            // Text mit weißem Hintergrund für bessere Lesbarkeit
+            const coordText1 = `${tileInfo.globalX}`;
+            const coordText2 = `${tileInfo.globalY}`;
+
+            // Roten Text zeichnen
+            this.ctx.fillStyle = 'red';
+            this.ctx.fillText(coordText1, tileX + 12, tileY + 7);
+            this.ctx.fillText(coordText2, tileX + 12, tileY + 17);
+        }
+    }
 }
 
 class App {
@@ -469,8 +436,8 @@ class App {
     private viewport: ViewportConfig;
 
     // Bewegungsparameter
-    private globalOffsetX: number = 500; // Start in der Mitte des großen Terrains
-    private globalOffsetY: number = 500;
+    private globalOffsetX: number = 100; // Start in der Mitte des großen Terrains
+    private globalOffsetY: number = 100;
     private moveSpeed: number = 1; // In Tile-Einheiten pro Tastendruck
 
     // Terrain-Update-System: Entkopplung von Animation und Rendering
@@ -490,7 +457,8 @@ class App {
     // Ground-Konstanten
     private static readonly GROUND_SIZE = 20;          // Größe der Ebene (20x20 Einheiten)
     private static readonly GROUND_SUBDIVISIONS = 30;  // Geometrie-Unterteilungen für glatte Darstellung
-    private static readonly DEBUG_TILE_BORDERS = false; // Debug: Kachel-Ränder sichtbar machen
+    public static readonly DEBUG_TILE_BORDERS = true; // Debug: Kachel-Ränder sichtbar machen
+    public static readonly WORLD_SIZE = 200; // Sehr großes Terrain (1000x1000)
 
     // Opacity-Konstanten
     private static readonly OPACITY_SIZE = 512;
@@ -551,6 +519,10 @@ class App {
         // Atlas laden
         await this.terrainRenderer.loadAtlas('/assets/textures.png');
 
+        // Terrain generieren BEVOR die Szene erstellt wird
+        console.log('Starte Terrain-Generierung...');
+        await this.tileProvider.generateAllTerrain('/assets/terrain.json');
+
         // Szene erstellen
         this.scene = await this.createScene();
 
@@ -599,16 +571,11 @@ class App {
         const light = new HemisphericLight('light', new Vector3(0, 1, 0), scene);
         light.intensity = 0.8;
 
-        // KONFIGURATION: Größe der Ebene und andere Parameter
-        const GROUND_SIZE = App.GROUND_SIZE;          // Größe der Ebene (20x20 Einheiten)
-        const GROUND_SUBDIVISIONS = App.GROUND_SUBDIVISIONS;  // Geometrie-Unterteilungen für glatte Darstellung
-        const DEBUG_TILE_BORDERS = App.DEBUG_TILE_BORDERS; // Debug: Kachel-Ränder sichtbar machen
-
         // Ebene erstellen
         const ground = MeshBuilder.CreateGround('ground', {
-            width: GROUND_SIZE,
-            height: GROUND_SIZE,
-            subdivisions: GROUND_SUBDIVISIONS
+            width: App.GROUND_SIZE,
+            height: App.GROUND_SIZE,
+            subdivisions: App.GROUND_SUBDIVISIONS
         }, scene);
 
         // Material mit dynamischer Textur erstellen
