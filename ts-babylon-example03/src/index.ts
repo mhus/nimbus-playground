@@ -74,6 +74,7 @@ interface TerrainData {
 class TileProvider {
     private tileCache: Map<string, Tile>; // Cache für bereits generierte Tiles
     private isGenerated: boolean = false; // Flag ob Terrain bereits generiert wurde
+    private worldSize: number = 200; // Dynamische Weltgröße (Standard-Fallback)
 
     constructor() {
         this.tileCache = new Map();
@@ -129,8 +130,8 @@ class TileProvider {
      * Prüft ob Koordinaten im gültigen Bereich sind
      */
     public isValidCoordinate(globalX: number, globalY: number): boolean {
-        return globalX >= 0 && globalX < App.WORLD_SIZE &&
-               globalY >= 0 && globalY < App.WORLD_SIZE;
+        return globalX >= 0 && globalX < this.worldSize &&
+               globalY >= 0 && globalY < this.worldSize;
     }
 
     /**
@@ -148,6 +149,9 @@ class TileProvider {
             var terrainData = await response.json();
 
             if (terrainData) {
+                // Weltgröße aus den Terrain-Daten setzen
+                this.worldSize = terrainData.worldSize;
+
                 console.log(`Terrain geladen: "${terrainData.metadata.name}"`);
                 console.log(`Beschreibung: ${terrainData.metadata.description}`);
                 console.log(`Weltgröße: ${terrainData.worldSize}x${terrainData.worldSize}`);
@@ -182,7 +186,7 @@ class TileProvider {
     }
 
     public getWorldSize(): number {
-        return App.WORLD_SIZE;
+        return this.worldSize;
     }
 }
 
@@ -461,10 +465,9 @@ class App {
     private static readonly CAMERA_ANGLE = 30;     // Winkel in Grad (0° = horizontal, 90° = von oben)
 
     // Ground-Konstanten
-    private static readonly GROUND_SIZE = 40;          // Größe der Ebene (20x20 Einheiten)
+    private static readonly GROUND_SIZE = 40;          // Größe der Ebene (40x40 Einheiten)
     private static readonly GROUND_SUBDIVISIONS = 30;  // Geometrie-Unterteilungen für glatte Darstellung
     public static readonly DEBUG_TILE_BORDERS = false; // Debug: Kachel-Ränder sichtbar machen
-    public static readonly WORLD_SIZE = 200; // Sehr großes Terrain (1000x1000)
 
     // Opacity-Konstanten
     private static readonly OPACITY_SIZE = 512;
@@ -771,6 +774,8 @@ class App {
             }
             if (keys['ArrowUp']) {
                 // Von der Kamera weg - Ebene bewegt sich zur Kamera hin
+                this.globalOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI);
+                this.globalOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI);
                 moved = true;
             }
 
