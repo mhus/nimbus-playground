@@ -34,6 +34,14 @@ interface ViewportConfig {
     viewportHeight: number;   // Anzahl der sichtbaren Kacheln in Y-Richtung
 }
 
+// Biom-Information für Terrain-Generierung
+interface BiomeInfo {
+    baseTexture: string;           // Basis-Textur des Bioms
+    vegetationTexture: string | null; // Vegetation/Detail-Textur (optional)
+    vegetationThreshold: number;   // Schwellenwert für Vegetation (0-1)
+    name: string;                  // Name des Bioms für Vergleiche
+}
+
 // TileProvider-Klasse für das große Terrain
 class TileProvider {
     private static readonly WORLD_SIZE = 1000; // Sehr großes Terrain (1000x1000)
@@ -63,30 +71,160 @@ class TileProvider {
 
     /**
      * Generiert ein neues Tile basierend auf globalen Koordinaten
+     * Verwendet Perlin-Noise-ähnliche Funktionen für realistische Terrains
      */
     private generateTile(globalX: number, globalY: number): Tile {
-        // Deterministische Generierung basierend auf Koordinaten
-        const seed = this.hashCoordinates(globalX, globalY);
-        const random = this.seededRandom(seed);
-
         const levels: Level[] = [];
 
-        // Basis-Level (0) immer vorhanden
-        if (random < 0.6) {
-            levels.push({ level: 0, texture: 'grass' });
-        } else if (random < 0.8) {
-            levels.push({ level: 0, texture: 'dirt' });
-        } else {
-            levels.push({ level: 0, texture: 'water' });
+        // Multi-Oktaven Noise für verschiedene Terrain-Features
+        const elevationNoise = this.multiOctaveNoise(globalX, globalY, 4, 0.01, 0.5); // Grosse Höhenunterschiede
+        const moistureNoise = this.multiOctaveNoise(globalX + 1000, globalY + 1000, 3, 0.02, 0.6); // Feuchtigkeit
+        const temperatureNoise = this.multiOctaveNoise(globalX + 2000, globalY + 2000, 2, 0.015, 0.4); // Temperatur
+        const detailNoise = this.multiOctaveNoise(globalX + 3000, globalY + 3000, 6, 0.05, 0.3); // Details
+
+        // Normalisiere Werte auf 0-1 Bereich
+        const elevation = Math.max(0, Math.min(1, (elevationNoise + 1) / 2));
+        const moisture = Math.max(0, Math.min(1, (moistureNoise + 1) / 2));
+        const temperature = Math.max(0, Math.min(1, (temperatureNoise + 1) / 2));
+        const detail = Math.max(0, Math.min(1, (detailNoise + 1) / 2));
+
+        // Biom-Bestimmung basierend auf Höhe, Feuchtigkeit und Temperatur
+        const biome = this.determineBiome(elevation, moisture, temperature);
+
+        // Basis-Level (0) basierend auf Biom
+        levels.push({ level: 0, texture: biome.baseTexture });
+
+        // Vegetations-/Detail-Level hinzufügen basierend auf Biom und Detail-Noise
+        if (detail > biome.vegetationThreshold) {
+            if (biome.vegetationTexture) {
+                levels.push({ level: 1, texture: biome.vegetationTexture });
+            }
         }
 
-        // Gelegentlich ein zweites Level hinzufügen
-        const secondRandom = this.seededRandom(seed + 1);
-        if (secondRandom < 0.3) {
-            levels.push({ level: 1, texture: 'grass_bushes' });
+        // Gelegentlich Steine oder andere Details bei hoher Elevation
+        if (elevation > 0.7 && detail > 0.8) {
+            levels.push({ level: 1, texture: 'dirt_stones' });
         }
 
         return { levels };
+    }
+
+    /**
+     * Multi-Oktaven Noise Generator für natürlichere Terrain-Features
+     */
+    private multiOctaveNoise(x: number, y: number, octaves: number, frequency: number, persistence: number): number {
+        let value = 0;
+        let amplitude = 1;
+        let totalAmplitude = 0;
+        let currentFrequency = frequency;
+
+        for (let i = 0; i < octaves; i++) {
+            value += this.simpleNoise(x * currentFrequency, y * currentFrequency) * amplitude;
+            totalAmplitude += amplitude;
+            amplitude *= persistence;
+            currentFrequency *= 2;
+        }
+
+        return value / totalAmplitude;
+    }
+
+    /**
+     * Einfache Noise-Funktion basierend auf Koordinaten
+     */
+    private simpleNoise(x: number, y: number): number {
+        // Pseudo-Perlin Noise Implementierung
+        const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+        return 2 * (n - Math.floor(n)) - 1; // Werte zwischen -1 und 1
+    }
+
+    /**
+     * Bestimmt das Biom basierend auf Umwelt-Parametern
+     */
+    private determineBiome(elevation: number, moisture: number, temperature: number): BiomeInfo {
+        // Wasser bei sehr niedriger Elevation
+        if (elevation < 0.25) {
+            return {
+                baseTexture: 'water',
+                vegetationTexture: null,
+                vegetationThreshold: 1.0, // Keine Vegetation im Wasser
+                name: 'water'
+            };
+        }
+
+        // Gebirge bei sehr hoher Elevation
+        if (elevation > 0.8) {
+            return {
+                baseTexture: 'dirt',
+                vegetationTexture: 'dirt_stones',
+                vegetationThreshold: 0.6,
+                name: 'mountain'
+            };
+        }
+
+        // Biom-Matrix basierend auf Feuchtigkeit und Temperatur
+        if (temperature > 0.6) { // Warm
+            if (moisture > 0.6) {
+                // Tropisch
+                return {
+                    baseTexture: 'grass',
+                    vegetationTexture: 'grass_bushes',
+                    vegetationThreshold: 0.4,
+                    name: 'tropical'
+                };
+            } else if (moisture > 0.3) {
+                // Savanne
+                return {
+                    baseTexture: 'grass',
+                    vegetationTexture: 'grass_bushes',
+                    vegetationThreshold: 0.7,
+                    name: 'savanna'
+                };
+            } else {
+                // Wüste
+                return {
+                    baseTexture: 'dirt',
+                    vegetationTexture: null,
+                    vegetationThreshold: 0.9,
+                    name: 'desert'
+                };
+            }
+        } else if (temperature > 0.3) { // Gemäßigt
+            if (moisture > 0.5) {
+                // Wald
+                return {
+                    baseTexture: 'grass',
+                    vegetationTexture: 'grass_bushes',
+                    vegetationThreshold: 0.3,
+                    name: 'forest'
+                };
+            } else {
+                // Grassland
+                return {
+                    baseTexture: 'grass',
+                    vegetationTexture: 'grass_bushes',
+                    vegetationThreshold: 0.6,
+                    name: 'grassland'
+                };
+            }
+        } else { // Kalt
+            if (moisture > 0.4) {
+                // Taiga
+                return {
+                    baseTexture: 'dirt',
+                    vegetationTexture: 'grass_bushes',
+                    vegetationThreshold: 0.5,
+                    name: 'taiga'
+                };
+            } else {
+                // Tundra
+                return {
+                    baseTexture: 'dirt',
+                    vegetationTexture: null,
+                    vegetationThreshold: 0.8,
+                    name: 'tundra'
+                };
+            }
+        }
     }
 
     /**
@@ -361,18 +499,14 @@ class App {
     // Terrain-Renderer-Konstanten
     private static readonly TILE_PIXEL_SIZE = 32; // Tile-Größe in Pixeln
 
-    // Tile-Atlas-Konfiguration
+    // Tile-Atlas-Konfiguration - nur vollflächige Texturen
     private readonly TILE_ATLAS: TileAtlas = {
         textureWidth: 512,
         textureHeight: 384,
         tiles: {
             'grass_bushes': { x: 350, y: 0, width: 325, height: 225 },
             'grass': { x: 0, y: 275, width: 325, height: 325 },
-            'dirt_l_grass_r': { x: 350, y: 275, width: 325, height: 325 },
-            'dirt_lb_grass_ru': { x: 700, y: 275, width: 325, height: 325 },
             'dirt': { x: 0, y: 650, width: 128, height: 128 },
-            'grass_l_dirt_r': { x: 350, y: 650, width: 325, height: 325 },
-            'grass_lu_dirt_rb': { x: 700, y: 650, width: 325, height: 325 },
             'water': { x: 0, y: 975, width: 128, height: 128 },
             'dirt_stones': { x: 700, y: 975, width: 128, height: 128 },
         }
