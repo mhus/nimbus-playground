@@ -1,15 +1,8 @@
 import { Engine, Scene, FreeCamera, Vector3, HemisphericLight } from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
 import { Terrain3DRenderer, ViewportConfig } from './terrain3d';
-import { TileAtlas, GlobalTileAtlas } from './atlas';
+import { GlobalTileAtlas } from './atlas';
 import { TileProvider } from './terrain';
-
-interface RenderCoordinates {
-    globalX: number;
-    globalY: number;
-    localX: number;
-    localY: number;
-}
 
 class App {
     private canvas: HTMLCanvasElement;
@@ -75,7 +68,7 @@ class App {
         this.terrain3DRenderer = new Terrain3DRenderer(
             this.tileProvider,
             this.viewport,
-            GlobalTileAtlas.TILE_ATLAS,
+            GlobalTileAtlas.TILE_TEXTURES_ATLAS,
             this.scene,
             App.TERRAIN_TILE_SIZE
         );
@@ -84,11 +77,13 @@ class App {
         await this.terrain3DRenderer.loadAtlas('/assets/textures.png');
 
         // Initiales Terrain rendern
-        this.terrain3DRenderer.updateViewport(
-            this.globalOffsetX,
-            this.globalOffsetY,
-            this.localOffsetX,
-            this.localOffsetY
+        this.terrain3DRenderer.update(
+            {
+                globalX: this.globalOffsetX,
+                globalY: this.globalOffsetY,
+                localX: this.localOffsetX,
+                localY: this.localOffsetY
+            }
         );
 
         // Keyboard-Events einrichten
@@ -159,11 +154,13 @@ class App {
             if (moved) {
                 this.updateGlobalOffsets();
                 // 3D-Terrain-Position sofort aktualisieren
-                this.terrain3DRenderer.updateViewport(
-                    this.globalOffsetX,
-                    this.globalOffsetY,
-                    this.localOffsetX,
-                    this.localOffsetY
+                this.terrain3DRenderer.update(
+                    {
+                        globalX: this.globalOffsetX,
+                        globalY: this.globalOffsetY,
+                        localX: this.localOffsetX,
+                        localY: this.localOffsetY
+                    }
                 );
             }
 

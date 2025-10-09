@@ -1,6 +1,7 @@
 import { Scene, Vector3, MeshBuilder, StandardMaterial, Texture, Color3, TransformNode, AbstractMesh, Mesh } from '@babylonjs/core';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import { TileAtlas } from './atlas';
+import { AtlasCoordinates } from './atlas';
 
 // Interfaces aus der Hauptdatei importieren
 export interface Level {
@@ -14,13 +15,6 @@ export interface Tile {
     levels: Level[];
 }
 
-export interface TileCoordinates {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-}
-
 export interface ViewportConfig {
     viewportCenterX: number;
     viewportCenterY: number;
@@ -32,6 +26,13 @@ export interface TileProvider {
     getTile(globalX: number, globalY: number): Tile;
     isValidCoordinate(globalX: number, globalY: number): boolean;
     getWorldSize(): number
+}
+
+export interface RenderCoordinates {
+    globalX: number;
+    globalY: number;
+    localX: number;
+    localY: number;
 }
 
 /**
@@ -56,6 +57,9 @@ export class Terrain3DRenderer {
     // Material Cache
     private atlasMaterial: StandardMaterial | null = null;
     private gltfCache: Map<string, AbstractMesh[]> = new Map();
+    private debugTileBorders: boolean = false;
+    private debugTileIndexes: boolean = false;
+    private tilesSize: number = 20;
 
     constructor(
         tileProvider: TileProvider,
@@ -91,42 +95,33 @@ export class Terrain3DRenderer {
     /**
      * Aktualisiert die Viewport-Position und rendert neue Tiles
      */
-    public updateViewport(centerX: number, centerY: number, localOffsetX: number = 0, localOffsetY: number = 0): void {
-        this.viewport.viewportCenterX = centerX;
-        this.viewport.viewportCenterY = centerY;
+    public update(coordinates : RenderCoordinates): void {
 
         // Terrain-Node Position aktualisieren für flüssige Bewegung
-        this.terrainNode.position.x = -localOffsetX;
-        this.terrainNode.position.z = localOffsetY; // Z ist "nach hinten" in Babylon.js
+        this.terrainNode.position.x = - coordinates.localX;
+        this.terrainNode.position.z = coordinates.localY; // Z ist "nach hinten" in Babylon.js
 
-        this.updateVisibleTiles();
+        this.updateTiles(coordinates);
     }
 
     /**
      * Aktualisiert die sichtbaren Tiles
      */
-    private updateVisibleTiles(): void {
+    private updateTiles(coordinates : RenderCoordinates): void {
         // Bereich der sichtbaren Tiles berechnen
-        const halfWidth = Math.ceil(this.viewport.viewportWidth / 2) + 1; // +1 für Buffer
-        const halfHeight = Math.ceil(this.viewport.viewportHeight / 2) + 1;
-
-        const startX = Math.floor(this.viewport.viewportCenterX - halfWidth);
-        const startY = Math.floor(this.viewport.viewportCenterY - halfHeight);
-        const endX = Math.ceil(this.viewport.viewportCenterX + halfWidth);
-        const endY = Math.ceil(this.viewport.viewportCenterY + halfHeight);
 
         // Neue Tiles sammeln
         const newTileKeys = new Set<string>();
 
-        for (let globalY = startY; globalY < endY; globalY++) {
-            for (let globalX = startX; globalX < endX; globalX++) {
-                if (this.tileProvider.isValidCoordinate(globalX, globalY)) {
-                    const key = `${globalX},${globalY}`;
+        for (let tileY = 0; tileY < this.tilesSize; tileY++) {
+            for (let tileX = 0; tileX < this.tilesSize; tileX++) {
+                if (this.tileProvider.isValidCoordinate(tileX, tileY)) {
+                    const key = `${tileX},${tileY}`;
                     newTileKeys.add(key);
 
                     // Tile erstellen falls noch nicht vorhanden
                     if (!this.activeTiles.has(key)) {
-                        this.createTile(globalX, globalY);
+                        this.createTile(tileX, tileY, coordinates.globalX, coordinates.globalY, );
                     }
                 }
             }
@@ -143,13 +138,13 @@ export class Terrain3DRenderer {
     /**
      * Erstellt ein 3D-Tile für die gegebenen Koordinaten
      */
-    private createTile(tileX: number, tileY: number): void {
-        const tile = this.tileProvider.getTile(tileX, tileY);
+    private createTile(tileX: number, tileY: number, globalX : number, globalY : number ): void {
+        const tile = this.tileProvider.getTile(globalX + tileX, globalY + tileY);
         const key = `${tileX},${tileY}`;
 
-        // 3D-Position berechnen
-        const worldX = (tileX - this.viewport.viewportCenterX) * this.tileSize;
-        const worldZ = -(tileY - this.viewport.viewportCenterY) * this.tileSize; // Negative Z für korrekte Orientierung
+        // 3D-Position berechnen - Tiles relativ zum Viewport-Zentrum positionieren
+        const worldX = (tileX - this.viewport.viewportWidth / 2) * this.tileSize;
+        const worldZ = -(tileY - this.viewport.viewportHeight / 2) * this.tileSize; // Negative Z für korrekte Orientierung
 
         const tileMeshes: AbstractMesh[] = [];
 
@@ -164,6 +159,41 @@ export class Terrain3DRenderer {
                 // 2D-Quad mit Atlas-Textur erstellen
                 this.create2DTile(level, worldX, worldZ, tileMeshes);
             }
+        }
+
+        if (this.debugTileBorders) {
+            // Debug: Tile-Grenzen anzeigen
+            const border = MeshBuilder.CreateGround(`border_${tileX}_${tileY}`, {
+                width: this.tileSize,
+                height: this.tileSize,
+                subdivisions: 1
+            }, this.scene);
+            border.position.x = worldX;
+            border.position.y = 0.01; // Leicht über dem Boden
+            border.position.z = worldZ;
+            border.parent = this.terrainNode;
+
+            const borderMaterial = new StandardMaterial(`debugBorderMat_${tileX}_${tileY}`, this.scene);
+            borderMaterial.emissiveColor = Color3.Red();
+            borderMaterial.wireframe = true;
+            border.material = borderMaterial;
+
+            tileMeshes.push(border);
+        }
+        if (this.debugTileIndexes) {
+            // Debug: Tile-Index anzeigen
+            const textPlane = MeshBuilder.CreatePlane(`debugText_${tileX}_${tileY}`, {
+                size: this.tileSize * 0.5
+            }, this.scene);
+            textPlane.position.x = worldX;
+            textPlane.position.y = 0.1; // Leicht über dem Boden
+            textPlane.position.z = worldZ;
+            textPlane.parent = this.terrainNode;
+            const textMaterial = new StandardMaterial(`debugTextMat_${tileX}_${tileY}`, this.scene);
+            textMaterial.emissiveColor = Color3.White();
+            textMaterial.backFaceCulling = false;
+            textPlane.material = textMaterial;
+            tileMeshes.push(textPlane);
         }
 
         // Tile in Active-Liste eintragen
@@ -340,15 +370,15 @@ export class Terrain3DRenderer {
     /**
      * Holt Tile-Koordinaten aus dem Atlas
      */
-    private getTileCoordinates(textureName: string): TileCoordinates | null {
-        return this.tileAtlas.tiles[textureName] || null;
+    private getTileCoordinates(textureName: string): AtlasCoordinates | null {
+        return this.tileAtlas.textures[textureName] || null;
     }
 
     /**
      * Forciert eine Aktualisierung aller Tiles
      */
-    public forceRedraw(): void {
-        this.updateVisibleTiles();
+    public forceRedraw(coordinates : RenderCoordinates): void {
+        this.updateTiles(coordinates);
     }
 
     /**

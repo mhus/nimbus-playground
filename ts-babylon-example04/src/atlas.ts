@@ -1,18 +1,25 @@
-import {TileCoordinates} from "./terrain3d";
+
+
+export interface AtlasCoordinates {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
 
 export interface TileAtlas {
     textureWidth: number;
     textureHeight: number;
-    tiles: { [key: string]: TileCoordinates };
+    textures: { [key: string]: AtlasCoordinates };
 }
 
 export class GlobalTileAtlas {
     // Tile-Atlas-Konfiguration
 
-    public static readonly TILE_ATLAS: TileAtlas = {
+    public static readonly TILE_TEXTURES_ATLAS: TileAtlas = {
         textureWidth: 512,
         textureHeight: 384,
-        tiles: {
+        textures: {
             'grass_bushes': {x: 350, y: 0, width: 325, height: 225},
             'grass': {x: 0, y: 275, width: 325, height: 325},
             'dirt': {x: 0, y: 650, width: 128, height: 128},
