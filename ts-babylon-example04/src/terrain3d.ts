@@ -1,5 +1,6 @@
 import { Scene, Vector3, MeshBuilder, StandardMaterial, Texture, Color3, TransformNode, AbstractMesh, Mesh } from '@babylonjs/core';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { TileAtlas } from './atlas';
 import { AtlasCoordinates } from './atlas';
 
@@ -57,9 +58,10 @@ export class Terrain3DRenderer {
     // Material Cache
     private atlasMaterial: StandardMaterial | null = null;
     private gltfCache: Map<string, AbstractMesh[]> = new Map();
-    private debugTileBorders: boolean = false;
-    private debugTileIndexes: boolean = false;
+    private debugTileBorders: boolean = true;
+    private debugTileIndexes: boolean = true;
     private tilesSize: number = 20;
+    private levelSize: number = 0.1;
 
     constructor(
         tileProvider: TileProvider,
@@ -163,36 +165,50 @@ export class Terrain3DRenderer {
 
         if (this.debugTileBorders) {
             // Debug: Tile-Grenzen anzeigen
-            const border = MeshBuilder.CreateGround(`border_${tileX}_${tileY}`, {
+            const border = MeshBuilder.CreateBox(`border_${tileX}_${tileY}`, {
                 width: this.tileSize,
-                height: this.tileSize,
-                subdivisions: 1
+                depth: this.tileSize,
+                height: this.levelSize * 20 // Hoch genug, um alle Level zu überdecken
             }, this.scene);
             border.position.x = worldX;
-            border.position.y = 0.01; // Leicht über dem Boden
+            border.position.y = -(this.levelSize * 5); // Leicht unter dem Boden
             border.position.z = worldZ;
             border.parent = this.terrainNode;
 
             const borderMaterial = new StandardMaterial(`debugBorderMat_${tileX}_${tileY}`, this.scene);
             borderMaterial.emissiveColor = Color3.Red();
+            borderMaterial.diffuseColor = Color3.Red();
             borderMaterial.wireframe = true;
             border.material = borderMaterial;
 
             tileMeshes.push(border);
         }
         if (this.debugTileIndexes) {
-            // Debug: Tile-Index anzeigen
-            const textPlane = MeshBuilder.CreatePlane(`debugText_${tileX}_${tileY}`, {
-                size: this.tileSize * 0.5
-            }, this.scene);
+
+            const texWidth = 1024;
+            const texHeight = 512;
+            const dynTex = new DynamicTexture("dynTex", { width: texWidth, height: texHeight }, this.scene, false);
+
+            // Anfangstext zeichnen
+            const fontPx = 120; // Schriftgröße
+            const font = `bold ${fontPx}px Arial`;
+            // Hinweis: x = null => horizontales Zentrieren; y = Baseline in Pixeln
+            dynTex.drawText((globalX + tileX) + "," + (globalY + tileY), null, texHeight / 2 + fontPx / 3, font, "white", "transparent", true);
+
+            // Material für die Plane
+            const mat = new StandardMaterial(`debugTextMat_${tileX}_${tileY}`, this.scene);
+            mat.diffuseTexture = dynTex;
+            mat.emissiveColor = new Color3(1, 1, 1);  // hält Text hell/unabhängig vom Licht
+            mat.backFaceCulling = false;               // beidseitig sichtbar
+            // Optional noch stärker von Licht entkoppeln:
+            // (mat.disableLighting = true);
+            const textPlane = MeshBuilder.CreatePlane("textPlane", { width: this.tileSize / 2, height: this.tileSize / 4 }, this.scene);
             textPlane.position.x = worldX;
-            textPlane.position.y = 0.1; // Leicht über dem Boden
+            textPlane.position.y = this.levelSize * 20; // Leicht über dem Boden
             textPlane.position.z = worldZ;
             textPlane.parent = this.terrainNode;
-            const textMaterial = new StandardMaterial(`debugTextMat_${tileX}_${tileY}`, this.scene);
-            textMaterial.emissiveColor = Color3.White();
-            textMaterial.backFaceCulling = false;
-            textPlane.material = textMaterial;
+            textPlane.material = mat;
+
             tileMeshes.push(textPlane);
         }
 
@@ -218,7 +234,7 @@ export class Terrain3DRenderer {
 
         // Position setzen (mit Level-Offset für 3D-Effekt)
         quad.position.x = worldX;
-        quad.position.y = level.level * 0.1; // Höhen-Offset für verschiedene Level
+        quad.position.y = level.level * this.levelSize; // Höhen-Offset für verschiedene Level
         quad.position.z = worldZ;
 
         // Parent setzen
@@ -402,5 +418,32 @@ export class Terrain3DRenderer {
 
         // Terrain-Node entfernen
         this.terrainNode.dispose();
+    }
+
+    /**
+     * Aktiviert/Deaktiviert die Underground-Debug-Ansicht
+     */
+    public setUndergroundView(enabled: boolean): void {
+        // Alle Terrain-Meshes durchgehen und Sichtbarkeit anpassen
+        for (const [key, tileData] of this.activeTiles) {
+            tileData.meshes.forEach(mesh => {
+                if (enabled) {
+                    // Underground-Modus: Mache Meshes transparent oder unsichtbar
+                    if (mesh.material) {
+                        (mesh.material as any).alpha = 0.3; // Halbtransparent
+                    }
+                    // Oder komplett unsichtbar machen:
+                    // mesh.setEnabled(false);
+                } else {
+                    // Normal-Modus: Stelle volle Sichtbarkeit wieder her
+                    if (mesh.material) {
+                        (mesh.material as any).alpha = 1.0; // Vollständig sichtbar
+                    }
+                    // mesh.setEnabled(true);
+                }
+            });
+        }
+
+        console.log(`Underground-Debug-Ansicht: ${enabled ? 'AKTIVIERT' : 'DEAKTIVIERT'}`);
     }
 }

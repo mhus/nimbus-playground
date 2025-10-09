@@ -21,7 +21,12 @@ class App {
 
     // Kamera-Rotationsparameter
     private cameraRotationY: number = -Math.PI / 2;
+    private cameraRotationZ: number = 0; // Z-Rotation für Neigung
     private cameraRotationSpeed: number = 0.02;
+
+    // Debug-Parameter für Untergrund-Ansicht
+    private isUndergroundView: boolean = false;
+    private originalCameraHeight: number = 0;
 
     // KONFIGURATION: Zentrale Definition aller Konstanten
     private static readonly TILE_SIZE = 20;
@@ -126,6 +131,8 @@ class App {
         let moveUp = false;
         let rotateLeft = false;
         let rotateRight = false;
+        let tiltUp = false;    // Z-Rotation nach oben
+        let tiltDown = false;  // Z-Rotation nach unten
 
         const updateMoving = () => {
             let moved = false;
@@ -179,16 +186,32 @@ class App {
                     }
                 }
 
-                if (rotateLeft || rotateRight) {
+                // Z-Rotation (Kameraneigung)
+                if (tiltUp) {
+                    this.cameraRotationZ += this.cameraRotationSpeed;
+                    // Begrenze die Neigung nach oben
+                    if (this.cameraRotationZ > Math.PI / 3) {
+                        this.cameraRotationZ = Math.PI / 3;
+                    }
+                }
+                if (tiltDown) {
+                    this.cameraRotationZ -= this.cameraRotationSpeed;
+                    // Begrenze die Neigung nach unten
+                    if (this.cameraRotationZ < -Math.PI / 6) {
+                        this.cameraRotationZ = -Math.PI / 6;
+                    }
+                }
+
+                if (rotateLeft || rotateRight || tiltUp || tiltDown) {
                     this.updateCameraPosition();
                 }
             }
         };
 
-        // Key-Events (identisch zum Original)
+        // Key-Events
         window.addEventListener('keydown', (event) => {
-            // Verhindere Standardverhalten für Pfeiltasten
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(event.code)) {
+            // Verhindere Standardverhalten für alle Steuerungstasten
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD', 'KeyW', 'KeyS', 'KeyU'].includes(event.code)) {
                 event.preventDefault();
             }
 
@@ -199,6 +222,9 @@ class App {
                 case 'ArrowUp': moveUp = true; break;
                 case 'KeyA': rotateLeft = true; break;
                 case 'KeyD': rotateRight = true; break;
+                case 'KeyW': tiltUp = true; break;      // W für Kamera nach oben neigen
+                case 'KeyS': tiltDown = true; break;    // S für Kamera nach unten neigen
+                case 'KeyU': this.toggleUndergroundView(); break; // U für Underground-Debug-Ansicht
             }
             updateMoving();
         });
@@ -211,12 +237,14 @@ class App {
                 case 'ArrowUp': moveUp = false; break;
                 case 'KeyA': rotateLeft = false; break;
                 case 'KeyD': rotateRight = false; break;
+                case 'KeyW': tiltUp = false; break;
+                case 'KeyS': tiltDown = false; break;
             }
             updateMoving();
         });
 
         this.scene.registerBeforeRender(() => {
-            if (moveRight || moveLeft || moveDown || moveUp || rotateLeft || rotateRight) {
+            if (moveRight || moveLeft || moveDown || moveUp || rotateLeft || rotateRight || tiltUp || tiltDown) {
                 updateMoving();
             }
         });
@@ -256,9 +284,37 @@ class App {
     }
 
     private updateCameraPosition() {
-        this.camera.position.x = App.CAMERA_DISTANCE * Math.cos(this.cameraRotationY);
-        this.camera.position.z = App.CAMERA_DISTANCE * Math.sin(this.cameraRotationY);
+        // Berechne Position basierend auf Y-Rotation (horizontal um das Zentrum)
+        const baseX = App.CAMERA_DISTANCE * Math.cos(this.cameraRotationY);
+        const baseZ = App.CAMERA_DISTANCE * Math.sin(this.cameraRotationY);
+        
+        // Berücksichtige Z-Rotation für Kameraneigung - MIT Abstandsänderung
+        const heightOffset = Math.sin(this.cameraRotationZ) * App.CAMERA_DISTANCE;
+        const distanceReduction = Math.cos(this.cameraRotationZ);
+
+        // Abstand wird durch Z-Rotation verändert
+        this.camera.position.x = baseX * distanceReduction;
+        this.camera.position.y = App.CAMERA_HEIGHT + heightOffset;
+        this.camera.position.z = baseZ * distanceReduction;
         this.camera.setTarget(Vector3.Zero());
+    }
+
+    private toggleUndergroundView(): void {
+        this.isUndergroundView = !this.isUndergroundView;
+
+        if (this.isUndergroundView) {
+            // Speichere die ursprüngliche Kamerahöhe
+            this.originalCameraHeight = this.camera.position.y;
+
+            // Setze die Kamera tiefer für die Untergrundansicht
+            this.camera.position.y = 2;
+        } else {
+            // Stelle die ursprüngliche Kamerahöhe wieder her
+            this.camera.position.y = this.originalCameraHeight;
+        }
+
+        // Aktualisiere die Terrain-Renderer-Einstellungen
+        this.terrain3DRenderer.setUndergroundView(this.isUndergroundView);
     }
 }
 
