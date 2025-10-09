@@ -472,7 +472,7 @@ class App {
     private static readonly CAMERA_ANGLE = 30;     // Winkel in Grad (0° = horizontal, 90° = von oben)
 
     // Ground-Konstanten
-    private static readonly GROUND_SIZE = 40;          // Größe der Ebene (40x40 Einheiten)
+    public static readonly GROUND_SIZE = 40;          // Größe der Ebene (40x40 Einheiten)
     private static readonly GROUND_SUBDIVISIONS = 30;  // Geometrie-Unterteilungen für glatte Darstellung
     public static readonly DEBUG_TILE_BORDERS = true; // Debug: Kachel-Ränder sichtbar machen
 
@@ -757,46 +757,40 @@ class App {
     }
 
     private setupKeyboardControls(): void {
-        // Keyboard-Event-Listener für kontinuierliche Bewegung
-        const keys: { [key: string]: boolean } = {};
+        // Bewegungsgeschwindigkeit pro Frame
+        const frameSpeed = 0.1;
 
-        // Key-Down Events
-        window.addEventListener('keydown', (event) => {
-            keys[event.code] = true;
-        });
+        // Kontinuierliche Bewegung für gehaltene Tasten
+        let moveRight = false;
+        let moveLeft = false;
+        let moveDown = false;
+        let moveUp = false;
+        let rotateLeft = false;
+        let rotateRight = false;
 
-        // Key-Up Events
-        window.addEventListener('keyup', (event) => {
-            keys[event.code] = false;
-        });
-
-        // Kontinuierliche Bewegung im Render-Loop
-        this.scene.registerBeforeRender(() => {
+        const updateMoving = () => {
             let moved = false;
 
-            // Bewegungsgeschwindigkeit pro Frame
-            const frameSpeed = 0.1; // 2% der Ground-Größe pro Frame für flüssige Bewegung
-
-            // Kamera-relative Bewegungsrichtungen (Betrachter bewegt sich über die Ebene)
-            if (keys['ArrowRight']) {
+            // Bewegung nur wenn Keys gedrückt sind
+            if (moveRight) {
                 // Rechts an der Kamera vorbei - Ebene bewegt sich nach links
                 this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
                 this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
                 moved = true;
             }
-            if (keys['ArrowLeft']) {
+            if (moveLeft) {
                 // Links an der Kamera vorbei - Ebene bewegt sich nach rechts
                 this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY - Math.PI / 2);
                 this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY - Math.PI / 2);
                 moved = true;
             }
-            if (keys['ArrowDown']) {
+            if (moveDown) {
                 // Zur Kamera hin - Ebene bewegt sich von der Kamera weg
                 this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY);
                 this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY);
                 moved = true;
             }
-            if (keys['ArrowUp']) {
+            if (moveUp) {
                 // Von der Kamera weg - Ebene bewegt sich zur Kamera hin
                 this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI);
                 this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI);
@@ -809,21 +803,85 @@ class App {
                 this.updateTextureOffset();
             }
 
-            // Kamera-Rotation basierend auf Bewegung
+            // Kamera-Rotation
             if (this.camera) {
-                if (keys['KeyA']) {
+                if (rotateLeft) {
                     // Nach links drehen
                     this.cameraRotationY -= this.cameraRotationSpeed;
                 }
-                if (keys['KeyD']) {
+                if (rotateRight) {
                     // Nach rechts drehen
                     this.cameraRotationY += this.cameraRotationSpeed;
                 }
 
-                // Kamera aktualisieren
-                this.camera.position.x = App.CAMERA_DISTANCE * Math.cos(this.cameraRotationY);
-                this.camera.position.z = App.CAMERA_DISTANCE * Math.sin(this.cameraRotationY);
-                this.camera.setTarget(Vector3.Zero());
+                // Kamera aktualisieren nur wenn Rotation stattgefunden hat
+                if (rotateLeft || rotateRight) {
+                    this.camera.position.x = App.CAMERA_DISTANCE * Math.cos(this.cameraRotationY);
+                    this.camera.position.z = App.CAMERA_DISTANCE * Math.sin(this.cameraRotationY);
+                    this.camera.setTarget(Vector3.Zero());
+                }
+            }
+        };
+
+        // Key-Down Events - Keys sofort auswerten
+        window.addEventListener('keydown', (event) => {
+            // Verhindere Standardverhalten für Pfeiltasten
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(event.code)) {
+                event.preventDefault();
+            }
+
+            switch (event.code) {
+                case 'ArrowRight':
+                    moveRight = true;
+                    break;
+                case 'ArrowLeft':
+                    moveLeft = true;
+                    break;
+                case 'ArrowDown':
+                    moveDown = true;
+                    break;
+                case 'ArrowUp':
+                    moveUp = true;
+                    break;
+                case 'KeyA':
+                    rotateLeft = true;
+                    break;
+                case 'KeyD':
+                    rotateRight = true;
+                    break;
+            }
+            updateMoving();
+        });
+
+        // Key-Up Events - Keys sofort auswerten
+        window.addEventListener('keyup', (event) => {
+            switch (event.code) {
+                case 'ArrowRight':
+                    moveRight = false;
+                    break;
+                case 'ArrowLeft':
+                    moveLeft = false;
+                    break;
+                case 'ArrowDown':
+                    moveDown = false;
+                    break;
+                case 'ArrowUp':
+                    moveUp = false;
+                    break;
+                case 'KeyA':
+                    rotateLeft = false;
+                    break;
+                case 'KeyD':
+                    rotateRight = false;
+                    break;
+            }
+            updateMoving();
+        });
+
+        // Kontinuierliche Bewegung im Render-Loop - nur für gehaltene Tasten
+        this.scene.registerBeforeRender(() => {
+            if (moveRight || moveLeft || moveDown || moveUp || rotateLeft || rotateRight) {
+                updateMoving();
             }
         });
     }
@@ -885,7 +943,7 @@ class App {
      * Verschiebt die Textur flüssig ohne Terrain-Update
      */
     private updateTextureOffset(): void {
-        if (this.tileMaterial && this.tileMaterial.diffuseTexture) {
+        if (this.tileMaterial?.diffuseTexture) {
             // Sicherstellen dass wir eine Texture (nicht BaseTexture) haben
             const diffuseTexture = this.tileMaterial.diffuseTexture as Texture;
 
