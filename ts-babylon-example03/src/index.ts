@@ -96,6 +96,7 @@ class TileProvider {
             try {
                 await this.loadTerrainFromJson(jsonPath);
                 console.log('JSON-Terrain erfolgreich geladen');
+                this.manipulateTerrain();
                 this.isGenerated = true;
                 return;
             } catch (error) {
@@ -132,6 +133,10 @@ class TileProvider {
     public isValidCoordinate(globalX: number, globalY: number): boolean {
         return globalX >= 0 && globalX < this.worldSize &&
                globalY >= 0 && globalY < this.worldSize;
+    }
+
+    public manipulateTerrain() {
+        this.tileCache.set("100,100", { levels: [{ level: 0, texture: 'water' }] });
     }
 
     /**
@@ -444,7 +449,9 @@ class App {
     // Bewegungsparameter
     private globalOffsetX: number = 100; // Start in der Mitte des großen Terrains
     private globalOffsetY: number = 100;
-    private moveSpeed: number = 1; // In Tile-Einheiten pro Tastendruck
+    private localOffsetX: number = 0; // Lokales Offset für flüssige Bewegung
+    private localOffsetY: number = 0; // Lokales Offset für flüssige Bewegung
+    private moveSpeed: number = 0.02; // In Tile-Einheiten pro Tastendruck
 
     // Kamera-Rotationsparameter
     private cameraRotationY: number = 0; // Rotation um die Y-Achse in Radiant
@@ -467,7 +474,7 @@ class App {
     // Ground-Konstanten
     private static readonly GROUND_SIZE = 40;          // Größe der Ebene (40x40 Einheiten)
     private static readonly GROUND_SUBDIVISIONS = 30;  // Geometrie-Unterteilungen für glatte Darstellung
-    public static readonly DEBUG_TILE_BORDERS = false; // Debug: Kachel-Ränder sichtbar machen
+    public static readonly DEBUG_TILE_BORDERS = true; // Debug: Kachel-Ränder sichtbar machen
 
     // Opacity-Konstanten
     private static readonly OPACITY_SIZE = 512;
@@ -602,8 +609,8 @@ class App {
 
         // Textur aus dem gerenderten Canvas erstellen
         this.tileTexture = new Texture('data:' + terrainCanvas.toDataURL(), scene);
-        this.tileTexture.wrapU = Texture.CLAMP_ADDRESSMODE;
-        this.tileTexture.wrapV = Texture.CLAMP_ADDRESSMODE;
+        this.tileTexture.wrapU = Texture.WRAP_ADDRESSMODE; // Geändert von CLAMP zu WRAP für flüssige Bewegung
+        this.tileTexture.wrapV = Texture.WRAP_ADDRESSMODE; // Geändert von CLAMP zu WRAP für flüssige Bewegung
 
         material.diffuseTexture = this.tileTexture;
         material.specularColor = Color3.Black();
@@ -725,8 +732,8 @@ class App {
             setTimeout(() => {
                 const dataUrl = canvas.toDataURL();
                 const texture = new Texture('data:' + dataUrl, this.scene);
-                texture.wrapU = Texture.CLAMP_ADDRESSMODE;
-                texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+                texture.wrapU = Texture.WRAP_ADDRESSMODE; // Geändert von CLAMP zu WRAP für konsistente Bewegung
+                texture.wrapV = Texture.WRAP_ADDRESSMODE; // Geändert von CLAMP zu WRAP für konsistente Bewegung
                 resolve(texture);
             }, 0); // Gibt anderen Tasks die Chance zu laufen
         });
@@ -751,44 +758,38 @@ class App {
             let moved = false;
 
             // Bewegungsgeschwindigkeit pro Frame
-            const frameSpeed = App.TILE_SIZE * 0.02; // 2% der Tile-Größe pro Frame für flüssige Bewegung
+            const frameSpeed = 0.02; // 2% der Ground-Größe pro Frame für flüssige Bewegung
 
             // Kamera-relative Bewegungsrichtungen (Betrachter bewegt sich über die Ebene)
             if (keys['ArrowRight']) {
                 // Rechts an der Kamera vorbei - Ebene bewegt sich nach links
-                this.globalOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
-                this.globalOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
+                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
+                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
                 moved = true;
             }
             if (keys['ArrowLeft']) {
                 // Links an der Kamera vorbei - Ebene bewegt sich nach rechts
-                this.globalOffsetX += frameSpeed * Math.cos(this.cameraRotationY - Math.PI / 2);
-                this.globalOffsetY += frameSpeed * Math.sin(this.cameraRotationY - Math.PI / 2);
+                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY - Math.PI / 2);
+                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY - Math.PI / 2);
                 moved = true;
             }
             if (keys['ArrowDown']) {
                 // Zur Kamera hin - Ebene bewegt sich von der Kamera weg
-                this.globalOffsetX += frameSpeed * Math.cos(this.cameraRotationY);
-                this.globalOffsetY += frameSpeed * Math.sin(this.cameraRotationY);
+                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY);
+                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY);
                 moved = true;
             }
             if (keys['ArrowUp']) {
                 // Von der Kamera weg - Ebene bewegt sich zur Kamera hin
-                this.globalOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI);
-                this.globalOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI);
+                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI);
+                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI);
                 moved = true;
             }
 
-            // Grenzen prüfen und Terrain aktualisieren falls bewegt
+            // Lokale Offsets prüfen und bei Bedarf globale Offsets anpassen
             if (moved) {
-                // Zentrale TILE_SIZE Konstante verwenden für korrekte Viewport-Grenzen
-                const halfTileSize = Math.ceil(App.TILE_SIZE / 2);
-
-                this.globalOffsetX = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetX));
-                this.globalOffsetY = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetY));
-
-                // Terrain neu rendern
-                this.requestTerrainUpdate();
+                this.updateGlobalOffsets();
+                this.updateTextureOffset();
             }
 
             // Kamera-Rotation basierend auf Bewegung
@@ -815,6 +816,70 @@ class App {
      */
     private requestTerrainUpdate(): void {
         this.terrainUpdateRequested = true;
+    }
+
+    /**
+     * Aktualisiert die globalen Offsets basierend auf den lokalen Offsets
+     * Wird aufgerufen wenn lokale Offsets die GROUND_SIZE Grenzen überschreiten
+     */
+    private updateGlobalOffsets(): void {
+        // Prüfe ob lokale Offsets die Grenzen überschreiten
+        let globalChanged = false;
+
+        console.log(`>>> Offsets before update: (${this.localOffsetX.toFixed(2)}, ${this.localOffsetY.toFixed(2)}) Global: (${this.globalOffsetX}, ${this.globalOffsetY})`);
+        // X-Achse prüfen
+        if (this.localOffsetX >= 1) {
+            this.globalOffsetX += 1;
+            this.localOffsetX -= 1;
+            globalChanged = true;
+        } else if (this.localOffsetX < 0) {
+            this.globalOffsetX -= 1;
+            this.localOffsetX += 1;
+            globalChanged = true;
+        }
+
+        // Y-Achse prüfen
+        if (this.localOffsetY >= 1) {
+            this.globalOffsetY += 1;
+            this.localOffsetY -= 1;
+            globalChanged = true;
+        } else if (this.localOffsetY < 0) {
+            this.globalOffsetY -= 1;
+            this.localOffsetY += 1;
+            globalChanged = true;
+        }
+
+        // Weltgrenzen prüfen
+        if (globalChanged) {
+            const halfTileSize = Math.ceil(App.TILE_SIZE / 2);
+            this.globalOffsetX = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetX));
+            this.globalOffsetY = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetY));
+
+            // Terrain-Update anfordern da sich die globale Position geändert hat
+            this.requestTerrainUpdate();
+        }
+
+        console.log(`--- Offsets after update: (${this.localOffsetX.toFixed(2)}, ${this.localOffsetY.toFixed(2)}) Global: (${this.globalOffsetX}, ${this.globalOffsetY})`);
+
+    }
+
+    /**
+     * Aktualisiert das Textur-Offset basierend auf den lokalen Offsets
+     * Verschiebt die Textur flüssig ohne Terrain-Update
+     */
+    private updateTextureOffset(): void {
+        if (this.tileMaterial && this.tileMaterial.diffuseTexture) {
+            // Sicherstellen dass wir eine Texture (nicht BaseTexture) haben
+            const diffuseTexture = this.tileMaterial.diffuseTexture as Texture;
+
+            // Normalisierte Offset-Werte berechnen (0-1 Bereich)
+            const normalizedOffsetX = this.localOffsetX / 1;
+            const normalizedOffsetY = this.localOffsetY / 1;
+
+            // UV-Offset setzen für flüssige Bewegung
+            diffuseTexture.uOffset = normalizedOffsetX;
+            diffuseTexture.vOffset = normalizedOffsetY;
+        }
     }
 }
 
