@@ -765,30 +765,30 @@ class App {
             // Bewegung nur wenn Keys gedrückt sind
             if (moveRight) {
                 // Rechts relativ zur Kamera (90° rechts von Kamerablickrichtung)
-                // this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
-                // this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
-                this.localOffsetX -= frameSpeed;
+                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
+                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
+                // this.localOffsetX -= frameSpeed;
                 moved = true;
             }
             if (moveLeft) {
                 // Links relativ zur Kamera (90° links von Kamerablickrichtung)
-                // this.localOffsetX -= frameSpeed * Math.cos(this.cameraRotationY - Math.PI / 2);
-                // this.localOffsetY -= frameSpeed * Math.sin(this.cameraRotationY - Math.PI / 2);
-                this.localOffsetX += frameSpeed;
+                this.localOffsetX -= frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
+                this.localOffsetY -= frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
+                // this.localOffsetX += frameSpeed;
                 moved = true;
             }
             if (moveDown) {
                 // ArrowDown: Zur Kamera hin (entgegengesetzt zur Kamerablickrichtung)
-                // this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY);
-                // this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY);
-                this.localOffsetY -= frameSpeed;
+                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY);
+                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY);
+                // this.localOffsetY -= frameSpeed;
                 moved = true;
             }
             if (moveUp) {
                 // ArrowUp: Von der Kamera weg (in Kamerablickrichtung)
-                // this.localOffsetX -= frameSpeed * Math.cos(this.cameraRotationY);
-                // this.localOffsetY -= frameSpeed * Math.sin(this.cameraRotationY);
-                this.localOffsetY += frameSpeed;
+                this.localOffsetX -= frameSpeed * Math.cos(this.cameraRotationY);
+                this.localOffsetY -= frameSpeed * Math.sin(this.cameraRotationY);
+                // this.localOffsetY += frameSpeed;
                 moved = true;
             }
 
@@ -805,10 +805,16 @@ class App {
                 if (rotateLeft) {
                     // Nach links drehen
                     this.cameraRotationY -= this.cameraRotationSpeed;
+                    if (this.cameraRotationY < -Math.PI) {
+                        this.cameraRotationY += 2 * Math.PI;
+                    }
                 }
                 if (rotateRight) {
                     // Nach rechts drehen
                     this.cameraRotationY += this.cameraRotationSpeed;
+                    if (this.cameraRotationY > Math.PI) {
+                        this.cameraRotationY -= 2 * Math.PI;
+                    }
                 }
 
                 // Kamera aktualisieren nur wenn Rotation stattgefunden hat
