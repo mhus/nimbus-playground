@@ -63,7 +63,7 @@ export class Terrain3DRenderer {
     // 3D Tile Management
     private terrainNode: TransformNode;
     private activeTiles: Map<string, {
-        meshes: AbstractMesh[];
+        meshes: (AbstractMesh | TransformNode)[];
         position: { globalX: number; globalY: number };
     }> = new Map();
 
@@ -179,7 +179,7 @@ export class Terrain3DRenderer {
             return;
         }
 
-        const tileMeshes: AbstractMesh[] = [];
+        const tileMeshes: (AbstractMesh | TransformNode)[] = [];
 
         // Alle Level des Tiles verarbeiten (sortiert nach Level)
         const sortedLevels = [...tile.levels].sort((a, b) => a.level - b.level);
@@ -254,7 +254,7 @@ export class Terrain3DRenderer {
     /**
      * Erstellt ein 2D-Quad für Atlas-Texturen
      */
-    private create2DTile(level: Level, worldX: number, worldZ: number, tileMeshes: AbstractMesh[], alpha: number = 1.0): void {
+    private create2DTile(level: Level, worldX: number, worldZ: number, tileMeshes: (AbstractMesh | TransformNode)[], alpha: number = 1.0): void {
         const coords = this.getTileCoordinates(level.texture!);
         if (!coords || !this.atlasMaterial || !this.atlasTexture) return;
 
@@ -306,94 +306,71 @@ export class Terrain3DRenderer {
     /**
      * Erstellt ein 3D-Tile für glTF-Dateien
      */
-    private async create3DTile(level: Level, worldX: number, worldZ: number, tileMeshes: AbstractMesh[], alpha: number = 1.0): Promise<void> {
+    private async create3DTile(level: Level, worldX: number, worldZ: number, tileMeshes: (AbstractMesh | TransformNode)[], alpha: number = 1.0): Promise<void> {
         if (!level.gltfFile) return;
 
         try {
             // Kein Cache - glTF jedes Mal frisch laden
             const result = await SceneLoader.LoadAssetContainerAsync("/assets/", level.gltfFile, this.scene);
-            // const meshes = result.meshes.filter(mesh => mesh.name !== '__root__'); // Root-Node ausschließen
-            const meshes = result.meshes;
-            // // Alle Meshes direkt verwenden
-            // for (const mesh of meshes) {
-            //     // Mesh zentrieren und skalieren BEVOR Position gesetzt wird
-            //     this.centerAndScaleMesh(mesh);
-            //
-            //     // Position setzen (nach dem Zentrieren)
-            //     mesh.position.x = worldX + this.tileSize / 2; // Zentriert im Tile
-            //     mesh.position.y = level.level;
-            //     mesh.position.z = worldZ - this.tileSize / 2; // Zentriert im Tile
-            //
-            //     // Rotation anwenden falls definiert
-            //     if (level.rotation) {
-            //         mesh.rotation.y = (level.rotation * Math.PI) / 180;
-            //     }
-            //
-            //     // Alpha-Wert für Fade-Effekt setzen
-            //     if (alpha < 1.0 && mesh.material) {
-            //         (mesh.material as any).alpha = alpha;
-            //         (mesh.material as any).transparencyMode = Material.MATERIAL_ALPHABLEND;
-            //     }
-            //
-            //     // Parent setzen
-            //     mesh.parent = this.terrainNode;
-            //
-            //
-            //     tileMeshes.push(mesh);
-            // }
-            // result.addToScene();
 
-            const root = result.createRootMesh();
-            this.centerAndScaleMesh(root);
-            root.position.x = worldX + this.tileSize / 2; // Zentriert im Tile
-            root.position.y = level.level;
-            root.position.z = worldZ - this.tileSize / 2; // Zentriert im Tile
-            root.parent = this.terrainNode;
-            root.overlayAlpha = alpha;
-            root.name = `tile3D_${level.gltfFile}_${worldX}_${worldZ}`;
+            // Container-Node erstellen um alle Meshes zu gruppieren
+            const containerNode = new TransformNode(`container_${level.gltfFile}_${worldX}_${worldZ}`, this.scene);
+            containerNode.position.x = worldX;
+            containerNode.position.y = level.level * this.levelSize;
+            containerNode.position.z = worldZ;
+            containerNode.parent = this.terrainNode;
+
+            // Rotation anwenden falls definiert
+            if (level.rotation) {
+                containerNode.rotation.y = (level.rotation * Math.PI) / 180;
+            }
+
+            // Alle Meshes aus dem Container zur Szene hinzufügen
             result.addToScene();
 
-// Platzhalter-Mesh erstellen, das beim Dispose das AssetContainer entsorgt
-            const placeholderMesh = new Mesh(`placeholder_${level.gltfFile}_${worldX}_${worldZ}`, this.scene);
-            placeholderMesh.setEnabled(false); // Unsichtbar machen
+            // Alle Meshes dem Container-Node als Parent zuweisen
+            result.meshes.forEach(mesh => {
+                if (mesh.name !== '__root__') {
+                    mesh.parent = containerNode;
 
-            // Überschreibe die dispose-Methode um das AssetContainer zu entsorgen
-            const originalDispose = placeholderMesh.dispose.bind(placeholderMesh);
-            placeholderMesh.dispose = () => {
-                root.dispose();
+                    // Alpha-Wert für Fade-Effekt setzen
+                    if (alpha < 1.0 && mesh.material) {
+                        // Material klonen um das Original nicht zu beeinflussen
+                        const clonedMaterial = mesh.material.clone(`${mesh.material.name}_${worldX}_${worldZ}`);
+                        mesh.material = clonedMaterial;
+                        (clonedMaterial as any).alpha = alpha;
+                        (clonedMaterial as any).transparencyMode = Material.MATERIAL_ALPHABLEND;
+                    }
+                }
+            });
+
+            // Container skalieren (nicht zentrieren, da es ein TransformNode ist)
+            containerNode.scaling = new Vector3(0.8, 0.8, 0.8); // Einfache Skalierung
+
+            // Custom dispose-Methode für ordnungsgemäße Bereinigung
+            const originalDispose = containerNode.dispose.bind(containerNode);
+            containerNode.dispose = () => {
+                // Zuerst alle Child-Meshes entfernen
+                result.meshes.forEach(mesh => {
+                    if (mesh.material) {
+                        mesh.material.dispose();
+                    }
+                    mesh.dispose();
+                });
+
+                // Dann das AssetContainer entsorgen
                 result.dispose();
+
+                // Schließlich den Container-Node selbst entsorgen
                 originalDispose();
             };
 
-            tileMeshes.push(placeholderMesh);
+            // Container-Node zu tileMeshes hinzufügen für Management
+            tileMeshes.push(containerNode);
+
         } catch (error) {
             console.error(`Fehler beim Laden von glTF-Datei ${level.gltfFile}:`, error);
         }
-    }
-
-    /**
-     * Zentriert und skaliert ein Mesh für optimale Darstellung
-     */
-    private centerAndScaleMesh(mesh: AbstractMesh): void {
-        if (!mesh.getBoundingInfo) return;
-
-        const boundingInfo = mesh.getBoundingInfo();
-        const min = boundingInfo.minimum;
-        const max = boundingInfo.maximum;
-
-        // Zentrum berechnen
-        const center = Vector3.Center(min, max);
-
-        // Größe berechnen
-        const size = max.subtract(min);
-        const maxSize = Math.max(size.x, size.y, size.z);
-
-        // Skalierungsfaktor berechnen (Mesh soll in Tile-Größe passen)
-        const scaleFactor = maxSize > 0 ? this.tileSize / maxSize : 1;
-
-        // Mesh zentrieren und skalieren
-        mesh.position = center.negate();
-        mesh.scaling = new Vector3(scaleFactor, scaleFactor, scaleFactor);
     }
 
     /**
@@ -405,7 +382,8 @@ export class Terrain3DRenderer {
 
         // Alle Meshes des Tiles entfernen
         tileData.meshes.forEach(mesh => {
-            if (mesh.material && mesh.material !== this.atlasMaterial) {
+            // Type Guard für AbstractMesh
+            if ('material' in mesh && mesh.material && mesh.material !== this.atlasMaterial) {
                 mesh.material.dispose();
             }
             mesh.dispose();
@@ -470,14 +448,14 @@ export class Terrain3DRenderer {
             tileData.meshes.forEach(mesh => {
                 if (enabled) {
                     // Underground-Modus: Mache Meshes transparent oder unsichtbar
-                    if (mesh.material) {
+                    if ('material' in mesh && mesh.material) {
                         (mesh.material as any).alpha = 0.3; // Halbtransparent
                     }
                     // Oder komplett unsichtbar machen:
                     // mesh.setEnabled(false);
                 } else {
                     // Normal-Modus: Stelle volle Sichtbarkeit wieder her
-                    if (mesh.material) {
+                    if ('material' in mesh && mesh.material) {
                         (mesh.material as any).alpha = 1.0; // Vollständig sichtbar
                     }
                     // mesh.setEnabled(true);
