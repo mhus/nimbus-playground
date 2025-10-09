@@ -1,4 +1,16 @@
-import { Scene, Vector3, MeshBuilder, StandardMaterial, Texture, Color3, TransformNode, AbstractMesh, Mesh, Material } from '@babylonjs/core';
+import {
+    Scene,
+    Vector3,
+    MeshBuilder,
+    StandardMaterial,
+    Texture,
+    Color3,
+    TransformNode,
+    AbstractMesh,
+    Mesh,
+    Material,
+    BoundingInfo
+} from '@babylonjs/core';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { TileAtlas } from './atlas';
@@ -300,36 +312,60 @@ export class Terrain3DRenderer {
         try {
             // Kein Cache - glTF jedes Mal frisch laden
             const result = await SceneLoader.LoadAssetContainerAsync("/assets/", level.gltfFile, this.scene);
-            const meshes = result.meshes.filter(mesh => mesh.name !== '__root__'); // Root-Node ausschließen
+            // const meshes = result.meshes.filter(mesh => mesh.name !== '__root__'); // Root-Node ausschließen
+            const meshes = result.meshes;
+            // // Alle Meshes direkt verwenden
+            // for (const mesh of meshes) {
+            //     // Mesh zentrieren und skalieren BEVOR Position gesetzt wird
+            //     this.centerAndScaleMesh(mesh);
+            //
+            //     // Position setzen (nach dem Zentrieren)
+            //     mesh.position.x = worldX + this.tileSize / 2; // Zentriert im Tile
+            //     mesh.position.y = level.level;
+            //     mesh.position.z = worldZ - this.tileSize / 2; // Zentriert im Tile
+            //
+            //     // Rotation anwenden falls definiert
+            //     if (level.rotation) {
+            //         mesh.rotation.y = (level.rotation * Math.PI) / 180;
+            //     }
+            //
+            //     // Alpha-Wert für Fade-Effekt setzen
+            //     if (alpha < 1.0 && mesh.material) {
+            //         (mesh.material as any).alpha = alpha;
+            //         (mesh.material as any).transparencyMode = Material.MATERIAL_ALPHABLEND;
+            //     }
+            //
+            //     // Parent setzen
+            //     mesh.parent = this.terrainNode;
+            //
+            //
+            //     tileMeshes.push(mesh);
+            // }
+            // result.addToScene();
 
-            // Alle Meshes direkt verwenden
-            for (const mesh of meshes) {
-                // Mesh zentrieren und skalieren BEVOR Position gesetzt wird
-                this.centerAndScaleMesh(mesh);
+            const root = result.createRootMesh();
+            this.centerAndScaleMesh(root);
+            root.position.x = worldX + this.tileSize / 2; // Zentriert im Tile
+            root.position.y = level.level;
+            root.position.z = worldZ - this.tileSize / 2; // Zentriert im Tile
+            root.parent = this.terrainNode;
+            root.overlayAlpha = alpha;
+            root.name = `tile3D_${level.gltfFile}_${worldX}_${worldZ}`;
+            result.addToScene();
 
-                // Position setzen (nach dem Zentrieren)
-                mesh.position.x = worldX + this.tileSize / 2; // Zentriert im Tile
-                mesh.position.y = level.level;
-                mesh.position.z = worldZ - this.tileSize / 2; // Zentriert im Tile
+// Platzhalter-Mesh erstellen, das beim Dispose das AssetContainer entsorgt
+            const placeholderMesh = new Mesh(`placeholder_${level.gltfFile}_${worldX}_${worldZ}`, this.scene);
+            placeholderMesh.setEnabled(false); // Unsichtbar machen
 
-                // Rotation anwenden falls definiert
-                if (level.rotation) {
-                    mesh.rotation.y = (level.rotation * Math.PI) / 180;
-                }
+            // Überschreibe die dispose-Methode um das AssetContainer zu entsorgen
+            const originalDispose = placeholderMesh.dispose.bind(placeholderMesh);
+            placeholderMesh.dispose = () => {
+                root.dispose();
+                result.dispose();
+                originalDispose();
+            };
 
-                // Alpha-Wert für Fade-Effekt setzen
-                if (alpha < 1.0 && mesh.material) {
-                    (mesh.material as any).alpha = alpha;
-                    (mesh.material as any).transparencyMode = Material.MATERIAL_ALPHABLEND;
-                }
-
-                // Parent setzen
-                mesh.parent = this.terrainNode;
-
-                result.addToScene();
-                tileMeshes.push(mesh);
-            }
-
+            tileMeshes.push(placeholderMesh);
         } catch (error) {
             console.error(`Fehler beim Laden von glTF-Datei ${level.gltfFile}:`, error);
         }

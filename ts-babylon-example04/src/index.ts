@@ -138,23 +138,23 @@ class App {
             let moved = false;
 
             if (moveRight) {
-                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
-                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
+                this.localOffsetX += frameSpeed * Math.cos(-this.cameraRotationY - Math.PI / 2);
+                this.localOffsetY += frameSpeed * Math.sin(-this.cameraRotationY - Math.PI / 2);
                 moved = true;
             }
             if (moveLeft) {
-                this.localOffsetX -= frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
-                this.localOffsetY -= frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
+                this.localOffsetX -= frameSpeed * Math.cos(-this.cameraRotationY - Math.PI / 2);
+                this.localOffsetY -= frameSpeed * Math.sin(-this.cameraRotationY - Math.PI / 2);
                 moved = true;
             }
             if (moveDown) {
-                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY);
-                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY);
+                this.localOffsetX += frameSpeed * Math.cos(-this.cameraRotationY);
+                this.localOffsetY += frameSpeed * Math.sin(-this.cameraRotationY);
                 moved = true;
             }
             if (moveUp) {
-                this.localOffsetX -= frameSpeed * Math.cos(this.cameraRotationY);
-                this.localOffsetY -= frameSpeed * Math.sin(this.cameraRotationY);
+                this.localOffsetX -= frameSpeed * Math.cos(-this.cameraRotationY);
+                this.localOffsetY -= frameSpeed * Math.sin(-this.cameraRotationY);
                 moved = true;
             }
 
