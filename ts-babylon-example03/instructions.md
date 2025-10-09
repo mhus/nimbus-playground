@@ -84,26 +84,27 @@ also einen lokalen index und einen globalen index.
 Da sich kacheln überlagern können, müssen die kacheln von unten nach oben
 gezeichnet werden.
 
-# Geht noch nicht !!!
+# 06 Steuerung
 
 Das stimmt nicht. ueberdenke das nochmal. Ich steuere mich ueber die Ebene, ich moechte die 
 ebene also mit dem ArrowUp immer con der kamera weg bewegen. Mit ArrowDown zur kamera hin. 
 Mit ArrowLeft an der Kamera nach rechts vorbei und mit ArrowRight an der kammera vorbei nach links.
 
-# Spaeter
+# 07 Levels
 
 Da tiles dargestellt werden sollen, muessen die Kacheln
 als Boxen dargestellt werden die gestapelt, bzw. auf verschiedenen
 Leveln stehen.
 
-Die Boxen benoetigen durch die isometrische Darstellung zwei seiten
-wenn die Kacheln auf dem gleichen Level stehen werden die seiten
-verdeckt.
+# 08 OBJ
 
-Die anzahl der level noch oben oder unten ist nicht festgelegt. Die
-aktuelle darstellung ist das level 0. Die höhe eines levels ist aber
-fest und soll in einer constante sein. Welche level mit welchen
-texturen es gibt, muss durch eine Struktur 
+Es sollen auch glTF dateien geladen werden können. Einige Dateien habe ich unter
+/assets/road hinterlegt. z.B. 'roadTile_050.gltf'. Der Range reicht von 000 bis 302.
+
+Erweitere Level so, dass auch der Name einer glTF Datei (z.B.road/roadTile_050.gltf) angegeben
+werden kann und deren Ausrichtung auf der Kachel.
+
+Erweitere drawTile() so, dass auch glTF Dateien geladen und positioniert werden können.
 
 
 
