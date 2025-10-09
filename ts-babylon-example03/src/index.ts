@@ -70,6 +70,13 @@ interface TerrainData {
     };
 }
 
+interface RenderCoordinates {
+    globalX: number;
+    globalY: number;
+    localX: number;
+    localY: number;
+}
+
 // TileProvider-Klasse für das große Terrain
 class TileProvider {
     private tileCache: Map<string, Tile>; // Cache für bereits generierte Tiles
@@ -258,9 +265,7 @@ class TerrainRenderer {
         if (!this.needsRedraw || !this.atlasImage) {
             return this.canvas;
         }
-
-        // Canvas leeren
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.needsRedraw = false;
 
         // Bereich der sichtbaren Tiles berechnen
         const startX = Math.floor(this.viewport.viewportCenterX - this.viewport.viewportWidth / 2);
@@ -304,6 +309,9 @@ class TerrainRenderer {
         // Nach Z-Order sortieren (von hinten nach vorne)
         tilesToRender.sort((a, b) => a.zOrder - b.zOrder);
 
+        // Canvas leeren
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
         // Tiles zeichnen
         for (const tileInfo of tilesToRender) {
             this.drawTile(
@@ -319,7 +327,6 @@ class TerrainRenderer {
         if (App.DEBUG_TILE_BORDERS) {
             this.drawDebugOverlay(tilesToRender);
         }
-        this.needsRedraw = false;
         return this.canvas;
     }
 
@@ -406,7 +413,7 @@ class TerrainRenderer {
 
         // Canvas-Kontext für Debug-Zeichnung vorbereiten
         this.ctx.strokeStyle = 'red';
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = 1;
         this.ctx.fillStyle = 'red';
         this.ctx.font = '12px Arial';
         this.ctx.textAlign = 'center';
@@ -419,16 +426,11 @@ class TerrainRenderer {
             // Roten Rahmen um das Tile zeichnen
             this.ctx.strokeRect(tileX, tileY, this.tileSize, this.tileSize);
 
-            // Koordinaten in die Mitte des Tiles schreiben
-            const centerX = tileX + this.tileSize / 2;
-            const centerY = tileY + this.tileSize / 2;
-
             // Text mit weißem Hintergrund für bessere Lesbarkeit
             const coordText1 = `${tileInfo.globalX}`;
             const coordText2 = `${tileInfo.globalY}`;
 
             // Roten Text zeichnen
-            this.ctx.fillStyle = 'red';
             this.ctx.fillText(coordText1, tileX + 12, tileY + 7);
             this.ctx.fillText(coordText2, tileX + 12, tileY + 17);
         }
@@ -454,11 +456,11 @@ class App {
     private moveSpeed: number = 0.02; // In Tile-Einheiten pro Tastendruck
 
     // Kamera-Rotationsparameter
-    private cameraRotationY: number = 0; // Rotation um die Y-Achse in Radiant
+    private cameraRotationY: number = -Math.PI / 2; // Rotation um die Y-Achse in Radiant
     private cameraRotationSpeed: number = 0.02; // Rotationsgeschwindigkeit pro Frame
 
     // Terrain-Update-System: Entkopplung von Animation und Rendering
-    private terrainUpdateRequested: boolean = false;
+    private terrainUpdateRequested: RenderCoordinates|null = null;
     private lastTerrainUpdate: number = 0;
     private readonly TERRAIN_UPDATE_THROTTLE = 200; // Erhöht auf 200ms für weniger Updates
     private isUpdatingTerrain: boolean = false; // Flag um gleichzeitige Updates zu verhindern
@@ -481,7 +483,7 @@ class App {
     private static readonly FADE_DISTANCE = 0.1; // Fade-Bereich vom Rand (0.0 - 0.5)
 
     // Terrain-Renderer-Konstanten
-    private static readonly TILE_PIXEL_SIZE = 32; // Tile-Größe in Pixeln
+    private static readonly TILE_PIXEL_SIZE = 64; // Tile-Größe in Pixeln
 
     // Tile-Atlas-Konfiguration - nur vollflächige Texturen
     private readonly TILE_ATLAS: TileAtlas = {
@@ -561,8 +563,9 @@ class App {
     private startTerrainUpdateTimer(): void {
         setInterval(() => {
             if (this.terrainUpdateRequested) {
-                this.terrainUpdateRequested = false;
-                this.updateTerrainTexture();
+                let localRequest = this.terrainUpdateRequested;
+                this.terrainUpdateRequested = null;
+                this.updateTerrainTexture(localRequest);
 
                 // Position loggen wenn Update stattfindet
 //                console.log(`Terrain updated at position: (${Math.round(this.globalOffsetX)}, ${Math.round(this.globalOffsetY)})`);
@@ -580,8 +583,8 @@ class App {
         const cameraZ = App.CAMERA_DISTANCE * Math.sin(angleRad);
 
         this.camera = new FreeCamera('camera', new Vector3(cameraX, App.CAMERA_HEIGHT, cameraZ), scene);
-        this.camera.setTarget(Vector3.Zero());
         this.camera.inputs.clear();
+        this.updateCameraPosition();
 
         // Licht hinzufügen
         const light = new HemisphericLight('light', new Vector3(0, 1, 0), scene);
@@ -685,7 +688,7 @@ class App {
      * Aktualisiert die Terrain-Textur basierend auf der aktuellen Position
      * Asynchrone Version um das Flimmern zu reduzieren
      */
-    private async updateTerrainTexture(): Promise<void> {
+    private async updateTerrainTexture(coordinates : RenderCoordinates): Promise<void> {
         // Verhindert gleichzeitige Updates
         if (this.isUpdatingTerrain) {
             return;
@@ -693,79 +696,28 @@ class App {
         this.isUpdatingTerrain = true;
 
         try {
-            // Lokale Kopien der aktuellen Werte erstellen um Race Conditions zu vermeiden
-            const currentGlobalOffsetX = this.globalOffsetX;
-            const currentGlobalOffsetY = this.globalOffsetY;
-
-            // WICHTIG: Lokale Offsets zum START des Updates erfassen und "einfrieren"
-            const frozenLocalOffsetX = this.localOffsetX;
-            const frozenLocalOffsetY = this.localOffsetY;
-
-            // Aktuelle UV-Offsets vor dem Update loggen UND SPEICHERN
-            let currentUOffset = 0;
-            let currentVOffset = 0;
-            if (this.tileMaterial?.diffuseTexture) {
-                const currentTexture = this.tileMaterial.diffuseTexture as Texture;
-                currentUOffset = currentTexture.uOffset;
-                currentVOffset = currentTexture.vOffset;
-            }
-
-            console.log(`🔄 TERRAIN UPDATE START - Global: (${currentGlobalOffsetX}, ${currentGlobalOffsetY}), Local: (${frozenLocalOffsetX.toFixed(3)}, ${frozenLocalOffsetY.toFixed(3)}), UV-Before: (${currentUOffset.toFixed(3)}, ${currentVOffset.toFixed(3)})`);
-
-            // KRITISCHER FIX: Viewport-Update erst NACH Textur-Erstellung
-            // Das verhindert dass neue Kacheln mit alten UV-Offsets angezeigt werden
-
-            // 1. Terrain im Hintergrund rendern OHNE Viewport zu ändern
-            const terrainCanvas = this.terrainRenderer.render();
-
-            // 2. UV-Offsets basierend auf den GEFRORENEN lokalen Offsets berechnen
-            const targetUOffset = frozenLocalOffsetX / App.GROUND_SIZE;
-            const targetVOffset = frozenLocalOffsetY / App.GROUND_SIZE;
-
-            // 3. Neue Textur mit den gefrorenen UV-Offsets erstellen
-            const newTexture = await this.createTextureFromCanvas(terrainCanvas, targetUOffset, targetVOffset);
-
-            console.log(`📦 New texture created with FROZEN UV: (${newTexture.uOffset.toFixed(3)}, ${newTexture.vOffset.toFixed(3)}) - Frozen Local: (${frozenLocalOffsetX.toFixed(3)}, ${frozenLocalOffsetY.toFixed(3)}) - Current Local: (${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)})`);
 
             // 4. JETZT erst Viewport aktualisieren und neues Terrain rendern
-            this.terrainRenderer.updateViewport(currentGlobalOffsetX, currentGlobalOffsetY);
+            this.terrainRenderer.updateViewport(coordinates.globalX, coordinates.globalY);
             const newTerrainCanvas = this.terrainRenderer.render();
 
             // 5. Finale Textur mit neuen Kacheln erstellen
-            const finalTexture = await this.createTextureFromCanvas(newTerrainCanvas, targetUOffset, targetVOffset);
-
-            // 6. Atomarer Austausch: Alte Textur durch finale Textur ersetzen
             const oldTexture = this.tileTexture;
-            this.tileTexture = finalTexture;
+            this.tileTexture =  await this.createTextureFromCanvas(newTerrainCanvas, coordinates.localX / App.GROUND_SIZE, coordinates.localY / App.GROUND_SIZE);
 
             if (this.tileMaterial) {
                 // Direkte atomare Zuweisung
                 this.tileMaterial.diffuseTexture = this.tileTexture;
-
-                console.log(`🔄 Material replaced - UV after replace: (${this.tileTexture.uOffset.toFixed(3)}, ${this.tileTexture.vOffset.toFixed(3)})`);
-
-                // UV-Offsets DIREKT auf aktuelle Position setzen
-                const currentNormalizedX = this.localOffsetX / App.GROUND_SIZE;
-                const currentNormalizedY = this.localOffsetY / App.GROUND_SIZE;
-
-                this.tileTexture.uOffset = currentNormalizedX;
-                this.tileTexture.vOffset = currentNormalizedY;
-
-                console.log(`✅ UV-Offsets updated to current position: (${this.tileTexture.uOffset.toFixed(3)}, ${this.tileTexture.vOffset.toFixed(3)})`);
             }
 
-            // Alte Textur und Zwischentextur dispose
+            // Alte Textur dispose
             if (oldTexture) {
                 setTimeout(() => {
                     oldTexture.dispose();
                 }, 50);
             }
-            // Zwischentextur auch disposen
-            setTimeout(() => {
-                newTexture.dispose();
-            }, 50);
 
-            console.log(`🏁 TERRAIN UPDATE END - Final Local: (${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)})`);
+//            console.log(`🏁 TERRAIN UPDATE END - Final Local: (${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)})`);
         } catch (error) {
             console.error('Fehler beim Terrain-Update:', error);
         } finally {
@@ -797,7 +749,7 @@ class App {
 
     private setupKeyboardControls(): void {
         // Bewegungsgeschwindigkeit pro Frame
-        const frameSpeed = 0.01;
+        const frameSpeed = 0.05;
 
         // Kontinuierliche Bewegung für gehaltene Tasten
         let moveRight = false;
@@ -812,36 +764,40 @@ class App {
 
             // Bewegung nur wenn Keys gedrückt sind
             if (moveRight) {
-                // Rechts: Lokale Offsets verringern (negative Richtung)
-                // Das stimmt mit UV-Logik überein (negative UV = Terrain nach rechts)
-                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
-                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
+                // Rechts relativ zur Kamera (90° rechts von Kamerablickrichtung)
+                // this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
+                // this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
+                this.localOffsetX -= frameSpeed;
                 moved = true;
             }
             if (moveLeft) {
-                // Links: Lokale Offsets erhöhen (positive Richtung)
-                // Das stimmt mit UV-Logik überein (positive UV = Terrain nach links)
-                this.localOffsetX -= frameSpeed * Math.cos(this.cameraRotationY - Math.PI / 2);
-                this.localOffsetY -= frameSpeed * Math.sin(this.cameraRotationY - Math.PI / 2);
+                // Links relativ zur Kamera (90° links von Kamerablickrichtung)
+                // this.localOffsetX -= frameSpeed * Math.cos(this.cameraRotationY - Math.PI / 2);
+                // this.localOffsetY -= frameSpeed * Math.sin(this.cameraRotationY - Math.PI / 2);
+                this.localOffsetX += frameSpeed;
                 moved = true;
             }
             if (moveDown) {
-                // Zur Kamera hin - Ebene bewegt sich von der Kamera weg
-                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY);
-                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY);
+                // ArrowDown: Zur Kamera hin (entgegengesetzt zur Kamerablickrichtung)
+                // this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY);
+                // this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY);
+                this.localOffsetY -= frameSpeed;
                 moved = true;
             }
             if (moveUp) {
-                // Von der Kamera weg - Ebene bewegt sich zur Kamera hin
-                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI);
-                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI);
+                // ArrowUp: Von der Kamera weg (in Kamerablickrichtung)
+                // this.localOffsetX -= frameSpeed * Math.cos(this.cameraRotationY);
+                // this.localOffsetY -= frameSpeed * Math.sin(this.cameraRotationY);
+                this.localOffsetY += frameSpeed;
                 moved = true;
             }
 
             // Lokale Offsets prüfen und bei Bedarf globale Offsets anpassen
             if (moved) {
                 this.updateGlobalOffsets();
-                this.updateTextureOffset();
+                if (!this.terrainUpdateRequested && !this.isUpdatingTerrain) {
+                    this.updateTextureOffset();
+                }
             }
 
             // Kamera-Rotation
@@ -857,9 +813,7 @@ class App {
 
                 // Kamera aktualisieren nur wenn Rotation stattgefunden hat
                 if (rotateLeft || rotateRight) {
-                    this.camera.position.x = App.CAMERA_DISTANCE * Math.cos(this.cameraRotationY);
-                    this.camera.position.z = App.CAMERA_DISTANCE * Math.sin(this.cameraRotationY);
-                    this.camera.setTarget(Vector3.Zero());
+                    this.updateCameraPosition();
                 }
             }
         };
@@ -931,7 +885,12 @@ class App {
      * Fordert ein Terrain-Update an (entkoppelt vom Rendering)
      */
     private requestTerrainUpdate(): void {
-        this.terrainUpdateRequested = true;
+        this.terrainUpdateRequested = {
+            globalX: this.globalOffsetX,
+            globalY: this.globalOffsetY,
+            localX: this.localOffsetX,
+            localY: this.localOffsetY
+        };
     }
 
     /**
@@ -942,26 +901,27 @@ class App {
         // Prüfe ob lokale Offsets die Grenzen überschreiten
         let globalChanged = false;
 
-//        console.log(`>>> Offsets before update: (${this.localOffsetX.toFixed(2)}, ${this.localOffsetY.toFixed(2)}) Global: (${this.globalOffsetX}, ${this.globalOffsetY})`);
-        // X-Achse prüfen
-        if (this.localOffsetX >= 1) {
+//        console.log(`>>> Offsets before update: Local=(${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)}) Global=(${this.globalOffsetX}, ${this.globalOffsetY})`);
+
+        // X-Achse prüfen - behalte den Rest-Offset bei
+        if (this.localOffsetX >= 2) {
             this.globalOffsetX += 1;
-            this.localOffsetX -= 1;
+            this.localOffsetX -= 2;
             globalChanged = true;
         } else if (this.localOffsetX < 0) {
             this.globalOffsetX -= 1;
-            this.localOffsetX += 1;
+            this.localOffsetX += 2;
             globalChanged = true;
         }
 
-        // Y-Achse prüfen
-        if (this.localOffsetY >= 1) {
-            this.globalOffsetY += 1;
-            this.localOffsetY -= 1;
+        // Y-Achse prüfen - behalte den Rest-Offset bei
+        if (this.localOffsetY >= 2) {
+            this.globalOffsetY -= 1;
+            this.localOffsetY -= 2;
             globalChanged = true;
         } else if (this.localOffsetY < 0) {
-            this.globalOffsetY -= 1;
-            this.localOffsetY += 1;
+            this.globalOffsetY += 1;
+            this.localOffsetY += 2;
             globalChanged = true;
         }
 
@@ -971,12 +931,12 @@ class App {
             this.globalOffsetX = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetX));
             this.globalOffsetY = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetY));
 
+//            console.log(`🔄 Global offset changed! New: Local=(${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)}) Global=(${this.globalOffsetX}, ${this.globalOffsetY})`);
+
             // Terrain-Update anfordern da sich die globale Position geändert hat
             this.requestTerrainUpdate();
         }
-
-//        console.log(`--- Offsets after update: (${this.localOffsetX.toFixed(2)}, ${this.localOffsetY.toFixed(2)}) Global: (${this.globalOffsetX}, ${this.globalOffsetY})`);
-
+        console.log(`🔄 Offsets after update: Local=(${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)}) Global=(${this.globalOffsetX}, ${this.globalOffsetY})`);
     }
 
     /**
@@ -986,9 +946,9 @@ class App {
     private updateTextureOffset(): void {
         // KRITISCHER FIX: Keine UV-Updates während Terrain-Update läuft
         // Das verhindert Race Conditions und Doppel-Updates
-        if (this.isUpdatingTerrain) {
-            return;
-        }
+        // if (this.isUpdatingTerrain) {
+        //     return;
+        // }
 
         if (this.tileMaterial?.diffuseTexture) {
             // Sicherstellen dass wir eine Texture (nicht BaseTexture) haben
@@ -1003,8 +963,14 @@ class App {
             diffuseTexture.vOffset = normalizedOffsetY;
 
             // Temporäres Debug-Logging für Y-Achsen-Problem
-            console.log(`📍 UV-OFFSET UPDATE - Local: (${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)}) → UV: (${normalizedOffsetX.toFixed(3)}, ${normalizedOffsetY.toFixed(3)})`);
+//            console.log(`📍 UV-OFFSET UPDATE - Local: (${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)}) → UV: (${normalizedOffsetX.toFixed(3)}, ${normalizedOffsetY.toFixed(3)})`);
         }
+    }
+
+    private updateCameraPosition() {
+        this.camera.position.x = App.CAMERA_DISTANCE * Math.cos(this.cameraRotationY);
+        this.camera.position.z = App.CAMERA_DISTANCE * Math.sin(this.cameraRotationY);
+        this.camera.setTarget(Vector3.Zero());
     }
 }
 
