@@ -697,41 +697,75 @@ class App {
             const currentGlobalOffsetX = this.globalOffsetX;
             const currentGlobalOffsetY = this.globalOffsetY;
 
-            // Aktuelle UV-Offsets merken BEVOR die Textur ersetzt wird
+            // WICHTIG: Lokale Offsets zum START des Updates erfassen und "einfrieren"
+            const frozenLocalOffsetX = this.localOffsetX;
+            const frozenLocalOffsetY = this.localOffsetY;
+
+            // Aktuelle UV-Offsets vor dem Update loggen UND SPEICHERN
             let currentUOffset = 0;
             let currentVOffset = 0;
-            if (this.tileMaterial && this.tileMaterial.diffuseTexture) {
+            if (this.tileMaterial?.diffuseTexture) {
                 const currentTexture = this.tileMaterial.diffuseTexture as Texture;
                 currentUOffset = currentTexture.uOffset;
                 currentVOffset = currentTexture.vOffset;
             }
 
-            // Terrain im Hintergrund rendern mit den lokalen Kopien
-            this.terrainRenderer.updateViewport(currentGlobalOffsetX, currentGlobalOffsetY);
+            console.log(`🔄 TERRAIN UPDATE START - Global: (${currentGlobalOffsetX}, ${currentGlobalOffsetY}), Local: (${frozenLocalOffsetX.toFixed(3)}, ${frozenLocalOffsetY.toFixed(3)}), UV-Before: (${currentUOffset.toFixed(3)}, ${currentVOffset.toFixed(3)})`);
+
+            // KRITISCHER FIX: Viewport-Update erst NACH Textur-Erstellung
+            // Das verhindert dass neue Kacheln mit alten UV-Offsets angezeigt werden
+
+            // 1. Terrain im Hintergrund rendern OHNE Viewport zu ändern
             const terrainCanvas = this.terrainRenderer.render();
 
-            // Neue Textur asynchron erstellen
-            const newTexture = await this.createTextureFromCanvas(terrainCanvas);
+            // 2. UV-Offsets basierend auf den GEFRORENEN lokalen Offsets berechnen
+            const targetUOffset = frozenLocalOffsetX / App.GROUND_SIZE;
+            const targetVOffset = frozenLocalOffsetY / App.GROUND_SIZE;
 
-            // UV-Offsets auf neue Textur übertragen
-            newTexture.uOffset = currentUOffset;
-            newTexture.vOffset = currentVOffset;
+            // 3. Neue Textur mit den gefrorenen UV-Offsets erstellen
+            const newTexture = await this.createTextureFromCanvas(terrainCanvas, targetUOffset, targetVOffset);
 
-            // Atomarer Austausch: Alte Textur durch neue ersetzen
+            console.log(`📦 New texture created with FROZEN UV: (${newTexture.uOffset.toFixed(3)}, ${newTexture.vOffset.toFixed(3)}) - Frozen Local: (${frozenLocalOffsetX.toFixed(3)}, ${frozenLocalOffsetY.toFixed(3)}) - Current Local: (${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)})`);
+
+            // 4. JETZT erst Viewport aktualisieren und neues Terrain rendern
+            this.terrainRenderer.updateViewport(currentGlobalOffsetX, currentGlobalOffsetY);
+            const newTerrainCanvas = this.terrainRenderer.render();
+
+            // 5. Finale Textur mit neuen Kacheln erstellen
+            const finalTexture = await this.createTextureFromCanvas(newTerrainCanvas, targetUOffset, targetVOffset);
+
+            // 6. Atomarer Austausch: Alte Textur durch finale Textur ersetzen
             const oldTexture = this.tileTexture;
-            this.tileTexture = newTexture;
+            this.tileTexture = finalTexture;
 
             if (this.tileMaterial) {
+                // Direkte atomare Zuweisung
                 this.tileMaterial.diffuseTexture = this.tileTexture;
+
+                console.log(`🔄 Material replaced - UV after replace: (${this.tileTexture.uOffset.toFixed(3)}, ${this.tileTexture.vOffset.toFixed(3)})`);
+
+                // UV-Offsets DIREKT auf aktuelle Position setzen
+                const currentNormalizedX = this.localOffsetX / App.GROUND_SIZE;
+                const currentNormalizedY = this.localOffsetY / App.GROUND_SIZE;
+
+                this.tileTexture.uOffset = currentNormalizedX;
+                this.tileTexture.vOffset = currentNormalizedY;
+
+                console.log(`✅ UV-Offsets updated to current position: (${this.tileTexture.uOffset.toFixed(3)}, ${this.tileTexture.vOffset.toFixed(3)})`);
             }
 
-            // Alte Textur erst nach dem Austausch dispose
+            // Alte Textur und Zwischentextur dispose
             if (oldTexture) {
-                // Kurze Verzögerung um sicherzustellen dass die neue Textur aktiv ist
                 setTimeout(() => {
                     oldTexture.dispose();
                 }, 50);
             }
+            // Zwischentextur auch disposen
+            setTimeout(() => {
+                newTexture.dispose();
+            }, 50);
+
+            console.log(`🏁 TERRAIN UPDATE END - Final Local: (${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)})`);
         } catch (error) {
             console.error('Fehler beim Terrain-Update:', error);
         } finally {
@@ -743,7 +777,7 @@ class App {
      * Erstellt eine Babylon.js Textur aus einem Canvas-Element
      * Asynchrone Version für bessere Performance
      */
-    private async createTextureFromCanvas(canvas: HTMLCanvasElement): Promise<Texture> {
+    private async createTextureFromCanvas(canvas: HTMLCanvasElement, uOffset: number = 0, vOffset: number = 0): Promise<Texture> {
         return new Promise((resolve) => {
             // Canvas zu Base64 konvertieren (kann bei großen Canvases Zeit dauern)
             setTimeout(() => {
@@ -751,6 +785,11 @@ class App {
                 const texture = new Texture('data:' + dataUrl, this.scene);
                 texture.wrapU = Texture.WRAP_ADDRESSMODE; // Geändert von CLAMP zu WRAP für konsistente Bewegung
                 texture.wrapV = Texture.WRAP_ADDRESSMODE; // Geändert von CLAMP zu WRAP für konsistente Bewegung
+
+                // UV-Offsets sofort nach der Erstellung setzen
+                texture.uOffset = uOffset;
+                texture.vOffset = vOffset;
+
                 resolve(texture);
             }, 0); // Gibt anderen Tasks die Chance zu laufen
         });
@@ -758,7 +797,7 @@ class App {
 
     private setupKeyboardControls(): void {
         // Bewegungsgeschwindigkeit pro Frame
-        const frameSpeed = 0.1;
+        const frameSpeed = 0.01;
 
         // Kontinuierliche Bewegung für gehaltene Tasten
         let moveRight = false;
@@ -773,15 +812,17 @@ class App {
 
             // Bewegung nur wenn Keys gedrückt sind
             if (moveRight) {
-                // Rechts an der Kamera vorbei - Ebene bewegt sich nach links
+                // Rechts: Lokale Offsets verringern (negative Richtung)
+                // Das stimmt mit UV-Logik überein (negative UV = Terrain nach rechts)
                 this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY + Math.PI / 2);
                 this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY + Math.PI / 2);
                 moved = true;
             }
             if (moveLeft) {
-                // Links an der Kamera vorbei - Ebene bewegt sich nach rechts
-                this.localOffsetX += frameSpeed * Math.cos(this.cameraRotationY - Math.PI / 2);
-                this.localOffsetY += frameSpeed * Math.sin(this.cameraRotationY - Math.PI / 2);
+                // Links: Lokale Offsets erhöhen (positive Richtung)
+                // Das stimmt mit UV-Logik überein (positive UV = Terrain nach links)
+                this.localOffsetX -= frameSpeed * Math.cos(this.cameraRotationY - Math.PI / 2);
+                this.localOffsetY -= frameSpeed * Math.sin(this.cameraRotationY - Math.PI / 2);
                 moved = true;
             }
             if (moveDown) {
@@ -901,7 +942,7 @@ class App {
         // Prüfe ob lokale Offsets die Grenzen überschreiten
         let globalChanged = false;
 
-        console.log(`>>> Offsets before update: (${this.localOffsetX.toFixed(2)}, ${this.localOffsetY.toFixed(2)}) Global: (${this.globalOffsetX}, ${this.globalOffsetY})`);
+//        console.log(`>>> Offsets before update: (${this.localOffsetX.toFixed(2)}, ${this.localOffsetY.toFixed(2)}) Global: (${this.globalOffsetX}, ${this.globalOffsetY})`);
         // X-Achse prüfen
         if (this.localOffsetX >= 1) {
             this.globalOffsetX += 1;
@@ -934,7 +975,7 @@ class App {
             this.requestTerrainUpdate();
         }
 
-        console.log(`--- Offsets after update: (${this.localOffsetX.toFixed(2)}, ${this.localOffsetY.toFixed(2)}) Global: (${this.globalOffsetX}, ${this.globalOffsetY})`);
+//        console.log(`--- Offsets after update: (${this.localOffsetX.toFixed(2)}, ${this.localOffsetY.toFixed(2)}) Global: (${this.globalOffsetX}, ${this.globalOffsetY})`);
 
     }
 
@@ -943,6 +984,12 @@ class App {
      * Verschiebt die Textur flüssig ohne Terrain-Update
      */
     private updateTextureOffset(): void {
+        // KRITISCHER FIX: Keine UV-Updates während Terrain-Update läuft
+        // Das verhindert Race Conditions und Doppel-Updates
+        if (this.isUpdatingTerrain) {
+            return;
+        }
+
         if (this.tileMaterial?.diffuseTexture) {
             // Sicherstellen dass wir eine Texture (nicht BaseTexture) haben
             const diffuseTexture = this.tileMaterial.diffuseTexture as Texture;
@@ -954,6 +1001,9 @@ class App {
             // UV-Offset setzen für flüssige Bewegung
             diffuseTexture.uOffset = normalizedOffsetX;
             diffuseTexture.vOffset = normalizedOffsetY;
+
+            // Temporäres Debug-Logging für Y-Achsen-Problem
+            console.log(`📍 UV-OFFSET UPDATE - Local: (${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)}) → UV: (${normalizedOffsetX.toFixed(3)}, ${normalizedOffsetY.toFixed(3)})`);
         }
     }
 }
