@@ -693,12 +693,29 @@ class App {
         this.isUpdatingTerrain = true;
 
         try {
-            // Terrain im Hintergrund rendern
-            this.terrainRenderer.updateViewport(this.globalOffsetX, this.globalOffsetY);
+            // Lokale Kopien der aktuellen Werte erstellen um Race Conditions zu vermeiden
+            const currentGlobalOffsetX = this.globalOffsetX;
+            const currentGlobalOffsetY = this.globalOffsetY;
+
+            // Aktuelle UV-Offsets merken BEVOR die Textur ersetzt wird
+            let currentUOffset = 0;
+            let currentVOffset = 0;
+            if (this.tileMaterial && this.tileMaterial.diffuseTexture) {
+                const currentTexture = this.tileMaterial.diffuseTexture as Texture;
+                currentUOffset = currentTexture.uOffset;
+                currentVOffset = currentTexture.vOffset;
+            }
+
+            // Terrain im Hintergrund rendern mit den lokalen Kopien
+            this.terrainRenderer.updateViewport(currentGlobalOffsetX, currentGlobalOffsetY);
             const terrainCanvas = this.terrainRenderer.render();
 
             // Neue Textur asynchron erstellen
             const newTexture = await this.createTextureFromCanvas(terrainCanvas);
+
+            // UV-Offsets auf neue Textur übertragen
+            newTexture.uOffset = currentUOffset;
+            newTexture.vOffset = currentVOffset;
 
             // Atomarer Austausch: Alte Textur durch neue ersetzen
             const oldTexture = this.tileTexture;
@@ -758,7 +775,7 @@ class App {
             let moved = false;
 
             // Bewegungsgeschwindigkeit pro Frame
-            const frameSpeed = 0.02; // 2% der Ground-Größe pro Frame für flüssige Bewegung
+            const frameSpeed = 0.1; // 2% der Ground-Größe pro Frame für flüssige Bewegung
 
             // Kamera-relative Bewegungsrichtungen (Betrachter bewegt sich über die Ebene)
             if (keys['ArrowRight']) {
@@ -873,8 +890,8 @@ class App {
             const diffuseTexture = this.tileMaterial.diffuseTexture as Texture;
 
             // Normalisierte Offset-Werte berechnen (0-1 Bereich)
-            const normalizedOffsetX = this.localOffsetX / 1;
-            const normalizedOffsetY = this.localOffsetY / 1;
+            const normalizedOffsetX = this.localOffsetX / App.GROUND_SIZE;
+            const normalizedOffsetY = this.localOffsetY / App.GROUND_SIZE;
 
             // UV-Offset setzen für flüssige Bewegung
             diffuseTexture.uOffset = normalizedOffsetX;
