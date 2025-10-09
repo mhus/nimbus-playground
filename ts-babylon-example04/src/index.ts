@@ -14,8 +14,8 @@ class App {
     private viewport: ViewportConfig;
 
     // Bewegungsparameter
-    private globalOffsetX: number = 100;
-    private globalOffsetY: number = 100;
+    private globalOffsetX: number = 90;
+    private globalOffsetY: number = 90;
     private localOffsetX: number = 0;
     private localOffsetY: number = 0;
 

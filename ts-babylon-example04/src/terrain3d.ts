@@ -202,7 +202,7 @@ export class Terrain3DRenderer {
 
             tileMeshes.push(border);
         }
-        if (this.debugTileIndexes) {
+        if (this.debugTileIndexes && ((globalX + tileX) % 10 == 0) && ((globalY + tileY) % 10 == 0)) {
 
             const texWidth = 1024;
             const texHeight = 512;
@@ -213,7 +213,7 @@ export class Terrain3DRenderer {
             const font = `bold ${fontPx}px Arial`;
             // Hinweis: x = null => horizontales Zentrieren; y = Baseline in Pixeln
             const type = tile.levels.map(l => l.texture ? l.texture : (l.gltfFile ? "3D" : "leer")).join(",");
-            dynTex.drawText((globalX + tileX) + "," + (globalY + tileY) + " " + type, null, texHeight / 2 + fontPx / 3, font, "white", "transparent", true);
+            dynTex.drawText((globalX + tileX) + "," + (globalY + tileY) /*+ " " + type */, null, texHeight / 2 + fontPx / 3, font, "white", "transparent", true);
 
             // Material für die Plane
             const mat = new StandardMaterial(`debugTextMat_${tileX}_${tileY}`, this.scene);
@@ -271,9 +271,9 @@ export class Terrain3DRenderer {
 
         // UV-Koordinaten für Atlas-Textur berechnen
         const uStart = coords.x / this.tileAtlas.textureWidth;
-        const vStart = coords.y / this.tileAtlas.textureHeight;
+        const vStart = 1.0 - (coords.y + coords.height) / this.tileAtlas.textureHeight;
         const uEnd = (coords.x + coords.width) / this.tileAtlas.textureWidth;
-        const vEnd = (coords.y + coords.height) / this.tileAtlas.textureHeight;
+        const vEnd = 1.0 - coords.y / this.tileAtlas.textureHeight;
 
         // UV-Mapping anwenden
         const uvs = quad.getVerticesData('uv');
@@ -298,79 +298,36 @@ export class Terrain3DRenderer {
         if (!level.gltfFile) return;
 
         try {
-            const cacheKey = `${level.gltfFile}_${level.rotation || 0}`;
+            // Kein Cache - glTF jedes Mal frisch laden
+            const result = await SceneLoader.LoadAssetContainerAsync("/assets/", level.gltfFile, this.scene);
+            const meshes = result.meshes.filter(mesh => mesh.name !== '__root__'); // Root-Node ausschließen
 
-            // Prüfe Cache
-            let meshes = this.gltfCache.get(cacheKey);
+            // Alle Meshes direkt verwenden
+            for (const mesh of meshes) {
+                // Mesh zentrieren und skalieren BEVOR Position gesetzt wird
+                this.centerAndScaleMesh(mesh);
 
-            if (!meshes) {
-                // glTF laden
-                const result = await SceneLoader.ImportMeshAsync("", "/assets/", level.gltfFile, this.scene);
-                meshes = result.meshes.filter(mesh => mesh.name !== '__root__'); // Root-Node ausschließen
+                // Position setzen (nach dem Zentrieren)
+                mesh.position.x = worldX + this.tileSize / 2; // Zentriert im Tile
+                mesh.position.y = level.level;
+                mesh.position.z = worldZ - this.tileSize / 2; // Zentriert im Tile
 
-                // Original-Meshes für Cache vorbereiten (unsichtbar machen)
-                meshes.forEach(mesh => {
-                    mesh.setEnabled(false);
-                    this.centerAndScaleMesh(mesh);
-                });
-
-                this.gltfCache.set(cacheKey, meshes);
-            }
-
-            // Instanzen der gecachten Meshes erstellen
-            for (const originalMesh of meshes) {
-                // Prüfe ob es ein Mesh ist (nicht nur AbstractMesh)
-                if (originalMesh instanceof Mesh) {
-                    const instance = originalMesh.createInstance(`${originalMesh.name}_${worldX}_${worldZ}`);
-
-                    // Position setzen
-                    instance.position.x = worldX;
-                    instance.position.y = level.level * 0.1;
-                    instance.position.z = worldZ;
-
-                    // Rotation anwenden falls definiert
-                    if (level.rotation) {
-                        instance.rotation.y = (level.rotation * Math.PI) / 180;
-                    }
-
-                    // Alpha-Wert für Fade-Effekt setzen
-                    if (instance.material && alpha < 1.0) {
-                        (instance.material as any).alpha = alpha;
-                        (instance.material as any).transparencyMode = Material.MATERIAL_ALPHABLEND;
-                    }
-
-                    // Parent setzen
-                    instance.parent = this.terrainNode;
-
-                    tileMeshes.push(instance);
-                } else {
-                    // Fallback: Clone für andere Mesh-Typen
-                    const clone = originalMesh.clone(`${originalMesh.name}_${worldX}_${worldZ}`, null);
-                    if (clone) {
-                        clone.setEnabled(true);
-
-                        // Position setzen
-                        clone.position.x = worldX;
-                        clone.position.y = level.level * 0.1;
-                        clone.position.z = worldZ;
-
-                        // Rotation anwenden falls definiert
-                        if (level.rotation) {
-                            clone.rotation.y = (level.rotation * Math.PI) / 180;
-                        }
-
-                        // Alpha-Wert für Fade-Effekt setzen
-                        if (clone.material && alpha < 1.0) {
-                            (clone.material as any).alpha = alpha;
-                            (clone.material as any).transparencyMode = Material.MATERIAL_ALPHABLEND;
-                        }
-
-                        // Parent setzen
-                        clone.parent = this.terrainNode;
-
-                        tileMeshes.push(clone);
-                    }
+                // Rotation anwenden falls definiert
+                if (level.rotation) {
+                    mesh.rotation.y = (level.rotation * Math.PI) / 180;
                 }
+
+                // Alpha-Wert für Fade-Effekt setzen
+                if (alpha < 1.0 && mesh.material) {
+                    (mesh.material as any).alpha = alpha;
+                    (mesh.material as any).transparencyMode = Material.MATERIAL_ALPHABLEND;
+                }
+
+                // Parent setzen
+                mesh.parent = this.terrainNode;
+
+                result.addToScene();
+                tileMeshes.push(mesh);
             }
 
         } catch (error) {
@@ -396,7 +353,7 @@ export class Terrain3DRenderer {
         const maxSize = Math.max(size.x, size.y, size.z);
 
         // Skalierungsfaktor berechnen (Mesh soll in Tile-Größe passen)
-        const scaleFactor = maxSize > 0 ? this.tileSize * 0.8 / maxSize : 1;
+        const scaleFactor = maxSize > 0 ? this.tileSize / maxSize : 1;
 
         // Mesh zentrieren und skalieren
         mesh.position = center.negate();
