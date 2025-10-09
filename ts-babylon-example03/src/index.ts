@@ -148,7 +148,7 @@ class TileProvider {
 
     public manipulateTerrain() {
         this.tileCache.set("100,100", { levels: [{ level: 0, texture: 'water' }] });
-        this.tileCache.set("99,99", { levels: [{ level: 0, gltfFile: "road/roadTile_050.gltf", rotation: 180 }] });
+//        this.tileCache.set("99,99", { levels: [{ level: 0, gltfFile: "road/roadTile_050.gltf", rotation: 180 }] });
     }
 
     /**

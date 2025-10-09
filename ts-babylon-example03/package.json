@@ -1,5 +1,5 @@
 {
-  "name": "ts-babylon-example02",
+  "name": "ts-babylon-example03",
   "version": "1.0.0",
   "description": "3D-Web-Applikation mit Babylon.js 8.0 und TypeScript",
   "main": "dist/index.js",
