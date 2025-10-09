@@ -1,5 +1,6 @@
 import { Scene, Vector3, MeshBuilder, StandardMaterial, Texture, Color3, TransformNode, AbstractMesh, Mesh } from '@babylonjs/core';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
+import { TileAtlas } from './atlas';
 
 // Interfaces aus der Hauptdatei importieren
 export interface Level {
@@ -20,12 +21,6 @@ export interface TileCoordinates {
     height: number;
 }
 
-export interface TileAtlas {
-    textureWidth: number;
-    textureHeight: number;
-    tiles: { [key: string]: TileCoordinates };
-}
-
 export interface ViewportConfig {
     viewportCenterX: number;
     viewportCenterY: number;
@@ -36,6 +31,7 @@ export interface ViewportConfig {
 export interface TileProvider {
     getTile(globalX: number, globalY: number): Tile;
     isValidCoordinate(globalX: number, globalY: number): boolean;
+    getWorldSize(): number
 }
 
 /**
@@ -147,13 +143,13 @@ export class Terrain3DRenderer {
     /**
      * Erstellt ein 3D-Tile für die gegebenen Koordinaten
      */
-    private createTile(globalX: number, globalY: number): void {
-        const tile = this.tileProvider.getTile(globalX, globalY);
-        const key = `${globalX},${globalY}`;
+    private createTile(tileX: number, tileY: number): void {
+        const tile = this.tileProvider.getTile(tileX, tileY);
+        const key = `${tileX},${tileY}`;
 
         // 3D-Position berechnen
-        const worldX = (globalX - this.viewport.viewportCenterX) * this.tileSize;
-        const worldZ = -(globalY - this.viewport.viewportCenterY) * this.tileSize; // Negative Z für korrekte Orientierung
+        const worldX = (tileX - this.viewport.viewportCenterX) * this.tileSize;
+        const worldZ = -(tileY - this.viewport.viewportCenterY) * this.tileSize; // Negative Z für korrekte Orientierung
 
         const tileMeshes: AbstractMesh[] = [];
 
@@ -173,7 +169,7 @@ export class Terrain3DRenderer {
         // Tile in Active-Liste eintragen
         this.activeTiles.set(key, {
             meshes: tileMeshes,
-            position: { globalX, globalY }
+            position: { globalX: tileX, globalY: tileY }
         });
     }
 
