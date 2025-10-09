@@ -266,11 +266,11 @@ class App {
 
         // Y-Achse prüfen
         if (this.localOffsetY >= App.TERRAIN_TILE_SIZE) {
-            this.globalOffsetY -= 1;
+            this.globalOffsetY += 1;
             this.localOffsetY -= App.TERRAIN_TILE_SIZE;
             globalChanged = true;
         } else if (this.localOffsetY < 0) {
-            this.globalOffsetY += 1;
+            this.globalOffsetY -= 1;
             this.localOffsetY += App.TERRAIN_TILE_SIZE;
             globalChanged = true;
         }
@@ -280,6 +280,12 @@ class App {
             const halfTileSize = Math.ceil(App.TILE_SIZE / 2);
             this.globalOffsetX = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetX));
             this.globalOffsetY = Math.max(halfTileSize, Math.min(this.tileProvider.getWorldSize() - halfTileSize, this.globalOffsetY));
+            this.terrain3DRenderer.forceRedrawAll({
+                globalX: this.globalOffsetX,
+                globalY: this.globalOffsetY,
+                localX: this.localOffsetX,
+                localY: this.localOffsetY
+            });
         }
     }
 

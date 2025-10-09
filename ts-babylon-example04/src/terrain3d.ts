@@ -1,4 +1,4 @@
-import { Scene, Vector3, MeshBuilder, StandardMaterial, Texture, Color3, TransformNode, AbstractMesh, Mesh } from '@babylonjs/core';
+import { Scene, Vector3, MeshBuilder, StandardMaterial, Texture, Color3, TransformNode, AbstractMesh, Mesh, Material } from '@babylonjs/core';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { TileAtlas } from './atlas';
@@ -58,10 +58,14 @@ export class Terrain3DRenderer {
     // Material Cache
     private atlasMaterial: StandardMaterial | null = null;
     private gltfCache: Map<string, AbstractMesh[]> = new Map();
-    private debugTileBorders: boolean = true;
+    private debugTileBorders: boolean = false;
     private debugTileIndexes: boolean = true;
     private tilesSize: number = 20;
     private levelSize: number = 0.1;
+
+    // Fade-Konfiguration
+    private fadeRadius: number = 8; // Radius in Tiles wo Fade beginnt
+    private fadeWidth: number = 2;  // Breite des Fade-Bereichs in Tiles
 
     constructor(
         tileProvider: TileProvider,
@@ -148,6 +152,21 @@ export class Terrain3DRenderer {
         const worldX = (tileX - this.viewport.viewportWidth / 2) * this.tileSize;
         const worldZ = -(tileY - this.viewport.viewportHeight / 2) * this.tileSize; // Negative Z für korrekte Orientierung
 
+        // Berechne Entfernung vom Zentrum für Fade-Effekt
+        const centerX = this.viewport.viewportWidth / 2;
+        const centerY = this.viewport.viewportHeight / 2;
+        const distanceFromCenter = Math.sqrt(
+            Math.pow(tileX - centerX, 2) + Math.pow(tileY - centerY, 2)
+        );
+
+        // Berechne Alpha-Wert basierend auf Entfernung
+        const alpha = this.calculateFadeAlpha(distanceFromCenter);
+
+        // Überspringe Tiles die komplett unsichtbar sind
+        if (alpha <= 0.01) {
+            return;
+        }
+
         const tileMeshes: AbstractMesh[] = [];
 
         // Alle Level des Tiles verarbeiten (sortiert nach Level)
@@ -156,10 +175,10 @@ export class Terrain3DRenderer {
         for (const level of sortedLevels) {
             if (level.gltfFile) {
                 // 3D glTF-Objekt laden
-                this.create3DTile(level, worldX, worldZ, tileMeshes);
+                this.create3DTile(level, worldX, worldZ, tileMeshes, alpha);
             } else if (level.texture) {
                 // 2D-Quad mit Atlas-Textur erstellen
-                this.create2DTile(level, worldX, worldZ, tileMeshes);
+                this.create2DTile(level, worldX, worldZ, tileMeshes, alpha);
             }
         }
 
@@ -193,7 +212,8 @@ export class Terrain3DRenderer {
             const fontPx = 120; // Schriftgröße
             const font = `bold ${fontPx}px Arial`;
             // Hinweis: x = null => horizontales Zentrieren; y = Baseline in Pixeln
-            dynTex.drawText((globalX + tileX) + "," + (globalY + tileY), null, texHeight / 2 + fontPx / 3, font, "white", "transparent", true);
+            const type = tile.levels.map(l => l.texture ? l.texture : (l.gltfFile ? "3D" : "leer")).join(",");
+            dynTex.drawText((globalX + tileX) + "," + (globalY + tileY) + " " + type, null, texHeight / 2 + fontPx / 3, font, "white", "transparent", true);
 
             // Material für die Plane
             const mat = new StandardMaterial(`debugTextMat_${tileX}_${tileY}`, this.scene);
@@ -222,7 +242,7 @@ export class Terrain3DRenderer {
     /**
      * Erstellt ein 2D-Quad für Atlas-Texturen
      */
-    private create2DTile(level: Level, worldX: number, worldZ: number, tileMeshes: AbstractMesh[]): void {
+    private create2DTile(level: Level, worldX: number, worldZ: number, tileMeshes: AbstractMesh[], alpha: number = 1.0): void {
         const coords = this.getTileCoordinates(level.texture!);
         if (!coords || !this.atlasMaterial || !this.atlasTexture) return;
 
@@ -242,6 +262,12 @@ export class Terrain3DRenderer {
 
         // Material mit UV-Mapping erstellen
         const material = this.atlasMaterial.clone(`material_${level.texture}_${worldX}_${worldZ}`);
+
+        // Alpha-Wert für Fade-Effekt setzen
+        material.alpha = alpha;
+        if (alpha < 1.0) {
+            material.transparencyMode = Material.MATERIAL_ALPHABLEND;
+        }
 
         // UV-Koordinaten für Atlas-Textur berechnen
         const uStart = coords.x / this.tileAtlas.textureWidth;
@@ -268,7 +294,7 @@ export class Terrain3DRenderer {
     /**
      * Erstellt ein 3D-Tile für glTF-Dateien
      */
-    private async create3DTile(level: Level, worldX: number, worldZ: number, tileMeshes: AbstractMesh[]): Promise<void> {
+    private async create3DTile(level: Level, worldX: number, worldZ: number, tileMeshes: AbstractMesh[], alpha: number = 1.0): Promise<void> {
         if (!level.gltfFile) return;
 
         try {
@@ -307,6 +333,12 @@ export class Terrain3DRenderer {
                         instance.rotation.y = (level.rotation * Math.PI) / 180;
                     }
 
+                    // Alpha-Wert für Fade-Effekt setzen
+                    if (instance.material && alpha < 1.0) {
+                        (instance.material as any).alpha = alpha;
+                        (instance.material as any).transparencyMode = Material.MATERIAL_ALPHABLEND;
+                    }
+
                     // Parent setzen
                     instance.parent = this.terrainNode;
 
@@ -325,6 +357,12 @@ export class Terrain3DRenderer {
                         // Rotation anwenden falls definiert
                         if (level.rotation) {
                             clone.rotation.y = (level.rotation * Math.PI) / 180;
+                        }
+
+                        // Alpha-Wert für Fade-Effekt setzen
+                        if (clone.material && alpha < 1.0) {
+                            (clone.material as any).alpha = alpha;
+                            (clone.material as any).transparencyMode = Material.MATERIAL_ALPHABLEND;
                         }
 
                         // Parent setzen
@@ -393,7 +431,17 @@ export class Terrain3DRenderer {
     /**
      * Forciert eine Aktualisierung aller Tiles
      */
-    public forceRedraw(coordinates : RenderCoordinates): void {
+    public forceRedrawAll(coordinates : RenderCoordinates): void {
+        for (let tileY = 0; tileY < this.tilesSize; tileY++) {
+            for (let tileX = 0; tileX < this.tilesSize; tileX++) {
+                this.removeTile(`${tileX},${tileY}`);
+            }
+        }
+        this.updateTiles(coordinates);
+    }
+
+    public forceRedrawTile(coordinates : RenderCoordinates, globalX : number, globalY : number): void {
+        this.removeTile(`${globalX},${globalY}`);
         this.updateTiles(coordinates);
     }
 
@@ -445,5 +493,19 @@ export class Terrain3DRenderer {
         }
 
         console.log(`Underground-Debug-Ansicht: ${enabled ? 'AKTIVIERT' : 'DEAKTIVIERT'}`);
+    }
+
+    /**
+     * Berechnet den Alpha-Wert für den Fade-Effekt basierend auf der Entfernung
+     */
+    private calculateFadeAlpha(distance: number): number {
+        if (distance < this.fadeRadius) {
+            return 1; // Voll sichtbar
+        } else if (distance > this.fadeRadius + this.fadeWidth) {
+            return 0; // Vollständig unsichtbar
+        } else {
+            // Linearer Fade-Effekt
+            return 1 - (distance - this.fadeRadius) / this.fadeWidth;
+        }
     }
 }
