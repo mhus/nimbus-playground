@@ -1,9 +1,13 @@
 import { Engine, Scene, FreeCamera, Vector3, HemisphericLight, MeshBuilder, StandardMaterial, Texture, Color3, ActionManager, ExecuteCodeAction } from '@babylonjs/core';
+import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
+import '@babylonjs/loaders/glTF';
 
 // Level-Interface für die Tile-Datenstruktur
 interface Level {
     level: number;
-    texture: string;
+    texture?: string;  // Optional für 2D-Texturen
+    gltfFile?: string; // Optional für 3D-glTF-Dateien (z.B. "road/roadTile_050.gltf")
+    rotation?: number; // Optional: Rotation in Grad (0, 90, 180, 270)
 }
 
 // Tile-Interface mit Level-Array
@@ -144,6 +148,7 @@ class TileProvider {
 
     public manipulateTerrain() {
         this.tileCache.set("100,100", { levels: [{ level: 0, texture: 'water' }] });
+        // this.tileCache.set("99,99", { levels: [{ level: 0, gltfFile: "road/roadTile_050.gltf", rotation: 180 }] });
     }
 
     /**
@@ -213,16 +218,23 @@ class TerrainRenderer {
     private tileSize: number;
     private needsRedraw: boolean = true;
 
+    // glTF support
+    public scene: Scene | null = null;
+    private gltfCache: Map<string, any[]> = new Map(); // Cache für geladene glTF-Modelle
+    private activeTileObjects: Map<string, any[]> = new Map(); // Aktive 3D-Objekte nach Tile-Position
+
     constructor(
         tileProvider: TileProvider,
         viewport: ViewportConfig,
         tileAtlas: TileAtlas,
-        tileSize: number = 64
+        tileSize: number = 64,
+        scene?: Scene
     ) {
         this.tileProvider = tileProvider;
         this.viewport = viewport;
         this.tileAtlas = tileAtlas;
         this.tileSize = tileSize;
+        this.scene = scene || null;
 
         // Canvas für das Terrain erstellen
         this.canvas = document.createElement('canvas');
@@ -266,6 +278,9 @@ class TerrainRenderer {
             return this.canvas;
         }
         this.needsRedraw = false;
+
+        // Cleanup von 3D-Objekten außerhalb des Viewports
+        this.cleanupInactiveTileObjects();
 
         // Bereich der sichtbaren Tiles berechnen
         const startX = Math.floor(this.viewport.viewportCenterX - this.viewport.viewportWidth / 2);
@@ -353,25 +368,146 @@ class TerrainRenderer {
         const sortedLevels = [...tile.levels].sort((a, b) => a.level - b.level);
 
         for (const level of sortedLevels) {
-            // Texture-Koordinaten für dieses Level holen
-            const coords = this.getTileCoordinates(level.texture);
-            if (!coords) continue;
+            // Prüfe ob es sich um ein glTF-Level handelt
+            // if (level.gltfFile) {
+            //     // 3D glTF-Objekt verarbeiten
+            //     this.handleGltfTile(level, globalX, globalY);
+            // } else if (level.texture) {
+            //     // 2D-Textur verarbeiten
+                this.handle2DTile(level, tileX, tileY);
+            // }
+        }
+    }
 
-            const { x: atlasX, y: atlasY, width: tileWidth, height: tileHeight } = coords;
+    /**
+     * Verarbeitet ein 2D-Textur-Level
+     */
+    private handle2DTile(level: Level, tileX: number, tileY: number): void {
+        const coords = this.getTileCoordinates(level.texture!);
+        if (!coords) return;
 
-            // Level-Offset berechnen (isometrischer 3D-Effekt)
-            const levelOffsetX = level.level * 2;
-            const levelOffsetY = level.level * -2;
+        const { x: atlasX, y: atlasY, width: tileWidth, height: tileHeight } = coords;
 
-            // Tile aus Atlas zeichnen
-            this.ctx.drawImage(
-                this.atlasImage!,
-                atlasX, atlasY, tileWidth, tileHeight,
-                tileX + levelOffsetX,
-                tileY + levelOffsetY,
-                this.tileSize,
-                this.tileSize
-            );
+        // Level-Offset berechnen (isometrischer 3D-Effekt)
+        const levelOffsetX = level.level * 2;
+        const levelOffsetY = level.level * -2;
+
+        // Tile aus Atlas zeichnen
+        this.ctx.drawImage(
+            this.atlasImage!,
+            atlasX, atlasY, tileWidth, tileHeight,
+            tileX + levelOffsetX,
+            tileY + levelOffsetY,
+            this.tileSize,
+            this.tileSize
+        );
+    }
+
+    /**
+     * Verarbeitet ein glTF-3D-Level
+     */
+    private async handleGltfTile(level: Level, globalX: number, globalY: number): Promise<void> {
+        if (!this.scene || !level.gltfFile) return;
+
+        const tileKey = `${globalX},${globalY}`;
+
+        // Prüfe ob bereits ein 3D-Objekt für diese Position existiert
+        if (this.activeTileObjects.has(tileKey)) {
+            return; // Objekt bereits geladen
+        }
+
+        try {
+            // glTF-Modell laden (mit Cache)
+            const meshes = await this.loadGltfModel(level.gltfFile);
+
+            // Klone die Meshes für diese Tile-Position
+            const clonedMeshes = meshes.map(mesh => mesh.clone(`${mesh.name}_${tileKey}`));
+
+            // Position in der 3D-Welt berechnen
+            const worldPosition = this.calculateWorldPosition(globalX, globalY, level.level);
+
+            // Meshes positionieren und rotieren
+            clonedMeshes.forEach(mesh => {
+                mesh.position = worldPosition;
+
+                // Rotation anwenden falls angegeben
+                if (level.rotation) {
+                    mesh.rotation.y = (level.rotation * Math.PI) / 180;
+                }
+            });
+
+            // Meshes in der aktiven Liste speichern
+            this.activeTileObjects.set(tileKey, clonedMeshes);
+
+        } catch (error) {
+            console.error(`Fehler beim Laden von glTF-Datei ${level.gltfFile}:`, error);
+        }
+    }
+
+    /**
+     * Lädt ein glTF-Modell (mit Cache)
+     */
+    private async loadGltfModel(gltfFile: string): Promise<any[]> {
+        // Prüfe Cache
+        if (this.gltfCache.has(gltfFile)) {
+            return this.gltfCache.get(gltfFile)!;
+        }
+
+        try {
+            const result = await SceneLoader.ImportMeshAsync("", "/assets/", gltfFile, this.scene!);
+            const meshes = result.meshes;
+
+            // Im Cache speichern
+            this.gltfCache.set(gltfFile, meshes);
+
+            console.log(`glTF-Modell geladen: ${gltfFile} (${meshes.length} Meshes)`);
+            return meshes;
+
+        } catch (error) {
+            console.error(`Fehler beim Laden von ${gltfFile}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Berechnet die Weltposition für ein Tile
+     */
+    private calculateWorldPosition(globalX: number, globalY: number, level: number): Vector3 {
+        // Konvertiere Tile-Koordinaten zu Welt-Koordinaten
+        // Annahme: Jedes Tile entspricht 2 Welteinheiten (passend zu App.GROUND_SIZE / App.TILE_SIZE)
+        const tileSize = 2;
+        const worldX = (globalX - this.viewport.viewportCenterX) * tileSize;
+        const worldZ = (globalY - this.viewport.viewportCenterY) * tileSize;
+        const worldY = level * 0.5; // Höhen-Offset pro Level
+
+        return new Vector3(worldX, worldY, worldZ);
+    }
+
+    /**
+     * Entfernt 3D-Objekte außerhalb des Viewports
+     */
+    private cleanupInactiveTileObjects(): void {
+        if (!this.scene) return;
+
+        const startX = Math.floor(this.viewport.viewportCenterX - this.viewport.viewportWidth / 2);
+        const startY = Math.floor(this.viewport.viewportCenterY - this.viewport.viewportHeight / 2);
+        const endX = startX + this.viewport.viewportWidth;
+        const endY = startY + this.viewport.viewportHeight;
+
+        // Alle aktiven Objekte durchgehen
+        for (const [tileKey, meshes] of this.activeTileObjects) {
+            const [globalX, globalY] = tileKey.split(',').map(Number);
+
+            // Prüfe ob außerhalb des Viewports
+            if (globalX < startX || globalX >= endX || globalY < startY || globalY >= endY) {
+                // Meshes aus der Szene entfernen
+                meshes.forEach(mesh => {
+                    mesh.dispose();
+                });
+
+                // Aus der aktiven Liste entfernen
+                this.activeTileObjects.delete(tileKey);
+            }
         }
     }
 
@@ -543,6 +679,7 @@ class App {
 
         // Szene erstellen
         this.scene = await this.createScene();
+        this.terrainRenderer.scene = this.scene; // Scene-Referenz setzen für glTF-Support
 
         // Keyboard-Events einrichten
         this.setupKeyboardControls();
@@ -577,6 +714,15 @@ class App {
         // Neue Szene erstellen
         const scene = new Scene(this.engine);
 
+        // Scene-Referenz an TerrainRenderer weiterleiten für glTF-Support
+        this.terrainRenderer = new TerrainRenderer(
+            this.tileProvider,
+            this.viewport,
+            this.TILE_ATLAS,
+            App.TILE_PIXEL_SIZE,
+            scene // Scene für glTF-Support
+        );
+
         // Isometrische Kamera
         const angleRad = (App.CAMERA_ANGLE * Math.PI) / 180;
         const cameraX = App.CAMERA_DISTANCE * Math.cos(angleRad);
@@ -610,7 +756,7 @@ class App {
         // Initiales Terrain rendern
         const terrainCanvas = this.terrainRenderer.render();
 
-        // Textur aus dem gerenderten Canvas erstellen
+        // Textur aus dem gerendeten Canvas erstellen
         this.tileTexture = new Texture('data:' + terrainCanvas.toDataURL(), scene);
         this.tileTexture.wrapU = Texture.WRAP_ADDRESSMODE; // Geändert von CLAMP zu WRAP für flüssige Bewegung
         this.tileTexture.wrapV = Texture.WRAP_ADDRESSMODE; // Geändert von CLAMP zu WRAP für flüssige Bewegung
@@ -942,7 +1088,7 @@ class App {
             // Terrain-Update anfordern da sich die globale Position geändert hat
             this.requestTerrainUpdate();
         }
-        console.log(`🔄 Offsets after update: Local=(${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)}) Global=(${this.globalOffsetX}, ${this.globalOffsetY})`);
+//        console.log(`🔄 Offsets after update: Local=(${this.localOffsetX.toFixed(3)}, ${this.localOffsetY.toFixed(3)}) Global=(${this.globalOffsetX}, ${this.globalOffsetY})`);
     }
 
     /**
