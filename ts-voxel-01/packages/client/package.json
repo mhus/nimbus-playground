@@ -1,0 +1,22 @@
+{
+  "name": "@voxel/client",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@voxel/core": "file:../core",
+    "@voxel/protocol": "file:../protocol",
+    "@babylonjs/core": "^8.32.0",
+    "@babylonjs/gui": "^8.32.0",
+    "@babylonjs/materials": "^8.32.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.10",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.10"
+  }
+}

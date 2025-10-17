@@ -1,0 +1,27 @@
+{
+  "name": "@voxel/workspace",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@voxel/client",
+    "dev:server": "npm run dev --workspace=@voxel/server",
+    "build": "npm run build --workspaces --if-present",
+    "build:client": "npm run build --workspace=@voxel/client",
+    "build:server": "npm run build --workspace=@voxel/server",
+    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules",
+    "type-check": "tsc --noEmit --project tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.10",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.10"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}

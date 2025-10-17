@@ -1,0 +1,28 @@
+{
+  "name": "@voxel/server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@voxel/core": "file:../core",
+    "@voxel/protocol": "file:../protocol",
+    "chalk": "^5.4.1",
+    "ndarray": "^1.0.19",
+    "open-simplex-noise": "^2.5.0",
+    "pako": "^2.1.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.10",
+    "@types/pako": "^2.0.3",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3"
+  }
+}
