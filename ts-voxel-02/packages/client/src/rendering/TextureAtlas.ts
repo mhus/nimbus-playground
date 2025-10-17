@@ -107,17 +107,19 @@ export class TextureAtlas {
     this.atlasCanvas = document.createElement('canvas');
     this.atlasCanvas.width = this.maxAtlasSize;
     this.atlasCanvas.height = this.maxAtlasSize;
-    this.atlasContext = this.atlasCanvas.getContext('2d', { willReadFrequently: true })!;
+    this.atlasContext = this.atlasCanvas.getContext('2d', { willReadFrequently: false })!;
 
     // Fill with magenta background (missing texture indicator)
     this.atlasContext.fillStyle = '#FF00FF';
     this.atlasContext.fillRect(0, 0, this.maxAtlasSize, this.maxAtlasSize);
 
-    // Create dynamic texture from canvas
-    this.atlasTexture = new DynamicTexture('dynamicAtlas', {
-      width: this.maxAtlasSize,
-      height: this.maxAtlasSize
-    }, this.scene, false);
+    // Create dynamic texture
+    this.atlasTexture = new DynamicTexture('dynamicAtlas', this.maxAtlasSize, this.scene, true);
+
+    // Get texture context and draw initial canvas
+    const textureContext = this.atlasTexture.getContext();
+    textureContext.drawImage(this.atlasCanvas, 0, 0);
+    this.atlasTexture.update();
 
     // Create material
     this.material = new StandardMaterial('atlasMaterial', this.scene);
@@ -155,12 +157,14 @@ export class TextureAtlas {
       // Load image
       const img = await this.loadImage(`${this.config.assetServerUrl}/${texturePath}`);
 
-      // Draw into atlas
+      // Draw into atlas canvas
       const pixelX = slotX * this.textureSize;
       const pixelY = slotY * this.textureSize;
       this.atlasContext!.drawImage(img, pixelX, pixelY, this.textureSize, this.textureSize);
 
-      // Update dynamic texture
+      // Update dynamic texture from canvas
+      const context = this.atlasTexture!.getContext();
+      context.drawImage(this.atlasCanvas!, 0, 0);
       this.atlasTexture!.update();
 
       // Cache position
