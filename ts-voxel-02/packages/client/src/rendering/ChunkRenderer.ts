@@ -5,12 +5,21 @@
 import {
   Mesh,
   VertexData,
-  Scene
+  Scene,
+  Matrix,
+  Vector3
 } from '@babylonjs/core';
-import type { ChunkData } from '../world/ChunkManager';
+import type { ChunkData } from '@voxel-02/core';
 import type { TextureAtlas, BlockFaceUVs, AtlasUV } from './TextureAtlas';
 import type { BlockType } from '@voxel-02/core';
 import type { ClientRegistry } from '../registry/ClientRegistry';
+import {
+  unpackMetadata,
+  getRotationAngleRadians,
+  type BlockMetadata,
+  BlockFacing,
+  RotationAxis
+} from '@voxel-02/core';
 
 /**
  * Renders chunks as Babylon.js meshes using texture atlas
@@ -64,15 +73,20 @@ export class ChunkRenderer {
           // Get UV mapping for this block
           const blockUVs = this.atlas.getBlockUVs(block);
 
+          // Get metadata if available
+          const packedMetadata = chunk.metadata?.[index] || 0;
+          const metadata = packedMetadata ? unpackMetadata(packedMetadata) : null;
+
           // World position
           const wx = chunk.chunkX * this.chunkSize + x;
           const wy = y;
           const wz = chunk.chunkZ * this.chunkSize + z;
 
-          // Add cube faces with appropriate UVs
+          // Add cube faces with appropriate UVs and rotation
           this.addCubeFaces(
             wx, wy, wz,
             blockUVs,
+            metadata,
             positions, indices, normals, uvs,
             vertexIndex
           );
@@ -110,16 +124,30 @@ export class ChunkRenderer {
   private addCubeFaces(
     x: number, y: number, z: number,
     blockUVs: BlockFaceUVs,
+    metadata: BlockMetadata | null,
     positions: number[], indices: number[], normals: number[], uvs: number[],
     vertexIndex: number
   ): void {
     const size = 1;
+
+    // Calculate rotation matrix if metadata exists
+    let rotationMatrix: Matrix | null = null;
+    if (metadata && metadata.rotationAxis !== RotationAxis.NONE) {
+      const angle = getRotationAngleRadians(metadata);
+      rotationMatrix = this.getRotationMatrix(metadata.rotationAxis, angle);
+    }
+
+    // Block center for rotation
+    const centerX = x + size / 2;
+    const centerY = y + size / 2;
+    const centerZ = z + size / 2;
 
     // Top face
     this.addFace(
       [x, y + size, z], [x + size, y + size, z], [x + size, y + size, z + size], [x, y + size, z + size],
       [0, 1, 0],
       blockUVs.top,
+      rotationMatrix, centerX, centerY, centerZ,
       positions, indices, normals, uvs, vertexIndex
     );
     vertexIndex += 4;
@@ -129,6 +157,7 @@ export class ChunkRenderer {
       [x, y, z + size], [x + size, y, z + size], [x + size, y, z], [x, y, z],
       [0, -1, 0],
       blockUVs.bottom,
+      rotationMatrix, centerX, centerY, centerZ,
       positions, indices, normals, uvs, vertexIndex
     );
     vertexIndex += 4;
@@ -138,6 +167,7 @@ export class ChunkRenderer {
       [x, y, z + size], [x, y + size, z + size], [x + size, y + size, z + size], [x + size, y, z + size],
       [0, 0, 1],
       blockUVs.north || blockUVs.sides,
+      rotationMatrix, centerX, centerY, centerZ,
       positions, indices, normals, uvs, vertexIndex
     );
     vertexIndex += 4;
@@ -147,6 +177,7 @@ export class ChunkRenderer {
       [x + size, y, z], [x + size, y + size, z], [x, y + size, z], [x, y, z],
       [0, 0, -1],
       blockUVs.south || blockUVs.sides,
+      rotationMatrix, centerX, centerY, centerZ,
       positions, indices, normals, uvs, vertexIndex
     );
     vertexIndex += 4;
@@ -156,6 +187,7 @@ export class ChunkRenderer {
       [x + size, y, z + size], [x + size, y + size, z + size], [x + size, y + size, z], [x + size, y, z],
       [1, 0, 0],
       blockUVs.east || blockUVs.sides,
+      rotationMatrix, centerX, centerY, centerZ,
       positions, indices, normals, uvs, vertexIndex
     );
     vertexIndex += 4;
@@ -165,6 +197,7 @@ export class ChunkRenderer {
       [x, y, z], [x, y + size, z], [x, y + size, z + size], [x, y, z + size],
       [-1, 0, 0],
       blockUVs.west || blockUVs.sides,
+      rotationMatrix, centerX, centerY, centerZ,
       positions, indices, normals, uvs, vertexIndex
     );
   }
@@ -176,15 +209,45 @@ export class ChunkRenderer {
     v1: number[], v2: number[], v3: number[], v4: number[],
     normal: number[],
     atlasUV: AtlasUV,
+    rotationMatrix: Matrix | null,
+    centerX: number, centerY: number, centerZ: number,
     positions: number[], indices: number[], normals: number[], uvs: number[],
     vertexIndex: number
   ): void {
+    // Apply rotation if matrix exists
+    const vertices = [v1, v2, v3, v4];
+    const rotatedVertices = vertices.map(v => {
+      if (rotationMatrix) {
+        // Translate to origin, rotate, translate back
+        const vec = Vector3.FromArray([
+          v[0] - centerX,
+          v[1] - centerY,
+          v[2] - centerZ
+        ]);
+        const rotated = Vector3.TransformCoordinates(vec, rotationMatrix);
+        return [
+          rotated.x + centerX,
+          rotated.y + centerY,
+          rotated.z + centerZ
+        ];
+      }
+      return v;
+    });
+
     // Positions
-    positions.push(...v1, ...v2, ...v3, ...v4);
+    positions.push(...rotatedVertices[0], ...rotatedVertices[1], ...rotatedVertices[2], ...rotatedVertices[3]);
+
+    // Rotate normals if needed
+    let finalNormal = normal;
+    if (rotationMatrix) {
+      const normalVec = Vector3.FromArray(normal);
+      const rotatedNormal = Vector3.TransformNormal(normalVec, rotationMatrix);
+      finalNormal = [rotatedNormal.x, rotatedNormal.y, rotatedNormal.z];
+    }
 
     // Normals (same for all 4 vertices)
     for (let i = 0; i < 4; i++) {
-      normals.push(...normal);
+      normals.push(...finalNormal);
     }
 
     // UVs (texture coordinates from atlas)
@@ -200,5 +263,21 @@ export class ChunkRenderer {
       vertexIndex, vertexIndex + 1, vertexIndex + 2,
       vertexIndex, vertexIndex + 2, vertexIndex + 3
     );
+  }
+
+  /**
+   * Get rotation matrix for given axis and angle
+   */
+  private getRotationMatrix(axis: RotationAxis, angle: number): Matrix {
+    switch (axis) {
+      case RotationAxis.X:
+        return Matrix.RotationX(angle);
+      case RotationAxis.Y:
+        return Matrix.RotationY(angle);
+      case RotationAxis.Z:
+        return Matrix.RotationZ(angle);
+      default:
+        return Matrix.Identity();
+    }
   }
 }

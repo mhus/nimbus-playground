@@ -7,13 +7,7 @@ import type { Scene } from '@babylonjs/core';
 import { ChunkRenderer } from '../rendering/ChunkRenderer';
 import type { TextureAtlas } from '../rendering/TextureAtlas';
 import type { ClientRegistry } from '../registry/ClientRegistry';
-
-export interface ChunkData {
-  chunkX: number;
-  chunkZ: number;
-  data: Uint16Array | number[];
-  height?: number;
-}
+import type { ChunkData } from '@voxel-02/core';
 
 /**
  * Manages chunk loading and rendering
