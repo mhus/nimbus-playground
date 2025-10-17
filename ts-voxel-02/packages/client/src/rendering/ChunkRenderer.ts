@@ -43,6 +43,8 @@ export class ChunkRenderer {
    * Create mesh from chunk data using dynamic texture atlas
    */
   async createChunkMesh(chunk: ChunkData): Promise<Mesh> {
+    console.log(`[ChunkRenderer] Starting to create chunk mesh ${chunk.chunkX},${chunk.chunkZ}`);
+
     const data = chunk.data;
     const height = chunk.height || 256;
 

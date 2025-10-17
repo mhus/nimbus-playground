@@ -157,6 +157,8 @@ export class ChunkManager {
    * Render chunk
    */
   private async renderChunk(chunk: ChunkData): Promise<void> {
+    console.log(`[ChunkManager] Starting to render chunk ${chunk.chunkX},${chunk.chunkZ}`);
+
     const key = this.getChunkKey(chunk.chunkX, chunk.chunkZ);
 
     // Remove old mesh if exists
@@ -165,11 +167,16 @@ export class ChunkManager {
       oldMesh.dispose();
     }
 
-    // Create new mesh (async - loads textures into atlas)
-    const mesh = await this.renderer.createChunkMesh(chunk);
-    this.chunkMeshes.set(key, mesh);
+    try {
+      // Create new mesh (async - loads textures into atlas)
+      console.log(`[ChunkManager] Calling createChunkMesh for ${chunk.chunkX},${chunk.chunkZ}`);
+      const mesh = await this.renderer.createChunkMesh(chunk);
+      this.chunkMeshes.set(key, mesh);
 
-    console.log(`[ChunkManager] Rendered chunk ${chunk.chunkX},${chunk.chunkZ}`);
+      console.log(`[ChunkManager] Rendered chunk ${chunk.chunkX},${chunk.chunkZ}`);
+    } catch (error) {
+      console.error(`[ChunkManager] Error rendering chunk ${chunk.chunkX},${chunk.chunkZ}:`, error);
+    }
   }
 
   /**

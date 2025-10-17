@@ -295,3 +295,4 @@ client in den server und passe server und client an.
   Das System ist bereit zum Testen! Der Server wird Assets dynamisch ausliefern und der Client lädt sie bei Bedarf.
 ```
 ---
+Die Voxels sollen nun etwas 

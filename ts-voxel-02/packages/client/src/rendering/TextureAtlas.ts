@@ -109,17 +109,15 @@ export class TextureAtlas {
     this.atlasCanvas.height = this.maxAtlasSize;
     this.atlasContext = this.atlasCanvas.getContext('2d', { willReadFrequently: false })!;
 
-    // Fill with magenta background (missing texture indicator)
-    this.atlasContext.fillStyle = '#FF00FF';
+    // Fill with white background initially for testing
+    this.atlasContext.fillStyle = '#FFFFFF';
     this.atlasContext.fillRect(0, 0, this.maxAtlasSize, this.maxAtlasSize);
 
-    // Create dynamic texture
-    this.atlasTexture = new DynamicTexture('dynamicAtlas', this.maxAtlasSize, this.scene, true);
+    // Create dynamic texture with generateMipMaps = false for simplicity
+    this.atlasTexture = new DynamicTexture('dynamicAtlas', this.maxAtlasSize, this.scene, false);
 
-    // Get texture context and draw initial canvas
-    const textureContext = this.atlasTexture.getContext();
-    textureContext.drawImage(this.atlasCanvas, 0, 0);
-    this.atlasTexture.update();
+    // Initial update from canvas
+    this.updateAtlasTexture();
 
     // Create material
     this.material = new StandardMaterial('atlasMaterial', this.scene);
@@ -128,6 +126,23 @@ export class TextureAtlas {
     this.material.backFaceCulling = true;
 
     console.log('[TextureAtlas] Dynamic atlas created');
+  }
+
+  /**
+   * Update the Babylon.js texture from canvas
+   */
+  private updateAtlasTexture(): void {
+    if (!this.atlasTexture || !this.atlasCanvas || !this.atlasContext) return;
+
+    // Get image data from our canvas
+    const imageData = this.atlasContext.getImageData(0, 0, this.maxAtlasSize, this.maxAtlasSize);
+
+    // Get the DynamicTexture's context and update it
+    const textureContext = this.atlasTexture.getContext();
+    textureContext.putImageData(imageData, 0, 0);
+
+    // Tell Babylon.js to update the GPU texture
+    this.atlasTexture.update();
   }
 
   /**
@@ -151,8 +166,6 @@ export class TextureAtlas {
     const slotY = Math.floor(this.nextSlot / this.texturesPerRow);
     this.nextSlot++;
 
-    console.log(`[TextureAtlas] Loading texture into slot ${slotX},${slotY}: ${texturePath}`);
-
     try {
       // Load image
       const img = await this.loadImage(`${this.config.assetServerUrl}/${texturePath}`);
@@ -163,9 +176,7 @@ export class TextureAtlas {
       this.atlasContext!.drawImage(img, pixelX, pixelY, this.textureSize, this.textureSize);
 
       // Update dynamic texture from canvas
-      const context = this.atlasTexture!.getContext();
-      context.drawImage(this.atlasCanvas!, 0, 0);
-      this.atlasTexture!.update();
+      this.updateAtlasTexture();
 
       // Cache position
       const position = { x: slotX, y: slotY };
@@ -186,8 +197,13 @@ export class TextureAtlas {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
+
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+      img.onerror = (e) => {
+        console.error(`[TextureAtlas] Failed to load image: ${url}`, e);
+        reject(new Error(`Failed to load image: ${url}`));
+      };
+
       img.src = url;
     });
   }
@@ -220,6 +236,8 @@ export class TextureAtlas {
     if (this.blockUVCache.has(block.name)) {
       return this.blockUVCache.get(block.name)!;
     }
+
+    console.log(`[TextureAtlas] Loading textures for block: ${block.name}`);
 
     let faceUVs: BlockFaceUVs;
 

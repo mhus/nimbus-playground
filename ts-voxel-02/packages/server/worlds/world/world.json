@@ -1,0 +1,9 @@
+{
+  "name": "world",
+  "seed": 323221,
+  "generator": "normal",
+  "chunkSize": 32,
+  "worldHeight": 256,
+  "version": 2,
+  "createdAt": 1760737838612
+}
