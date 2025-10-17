@@ -52,7 +52,7 @@ export class World {
       version: 2,
       createdAt: Date.now(),
       chunkSize: this.config.chunkSize,
-      worldSize: this.config.worldHeight,
+      worldSize: this.config.worldSize,
     };
 
     await this.persistence.saveWorldMetadata(metadata);
@@ -66,7 +66,7 @@ export class World {
       // Update config with loaded metadata
       this.config.seed = metadata.seed;
       this.config.chunkSize = metadata.chunkSize || this.config.chunkSize;
-      this.config.worldHeight = metadata.worldSize || this.config.worldHeight;
+      this.config.worldSize = metadata.worldSize || this.config.worldSize;
       this.generatorType = metadata.generator;
 
       // Recreate generator with correct type
@@ -79,30 +79,42 @@ export class World {
   }
 
   private startAutoSave(): void {
+    console.log('[World] Auto-save enabled (every 30 seconds)');
     this.autoSaveInterval = setInterval(() => {
+      console.log('[World] Auto-save triggered');
       this.saveModifiedChunks();
     }, 30000); // 30 seconds
   }
 
   async saveModifiedChunks(): Promise<void> {
-    if (this.modifiedChunks.size === 0) return;
+    if (this.modifiedChunks.size === 0) {
+      console.log('[World] Auto-save: No modified chunks to save');
+      return;
+    }
 
-    console.log(`Saving ${this.modifiedChunks.size} modified chunks...`);
+    console.log(`[World] Saving ${this.modifiedChunks.size} modified chunks...`);
 
+    let savedCount = 0;
     for (const key of this.modifiedChunks) {
-      const [x, z] = key.split(',').map(Number);
+      const [x, , z] = key.split(',').map(Number);
       const chunk = this.chunks.get(key);
 
       if (chunk) {
-        await this.persistence.saveChunk(x, z, chunk, {
-          version: 2,
-          stage: 1,
-        });
+        try {
+          await this.persistence.saveChunk(x, z, chunk, {
+            version: 2,
+            stage: 1,
+          });
+          savedCount++;
+          console.log(`[World]   Saved chunk (${x},${z})`);
+        } catch (error) {
+          console.error(`[World]   Failed to save chunk (${x},${z}):`, error);
+        }
       }
     }
 
     this.modifiedChunks.clear();
-    console.log('Chunks saved');
+    console.log(`[World] Successfully saved ${savedCount} chunks`);
   }
 
   async shutdown(): Promise<void> {
@@ -119,6 +131,7 @@ export class World {
     let chunk = this.chunks.get(key);
 
     if (!chunk) {
+      console.log(`[World] Generating chunk (${x},${y},${z})`);
       // Try to load from disk first, then generate
       chunk = this.loadOrGenerateChunk(x, y, z);
       this.chunks.set(key, chunk);
@@ -161,6 +174,7 @@ export class World {
     // Mark chunk as modified
     const key = chunkPositionToKey(chunkX, chunkY, chunkZ);
     this.modifiedChunks.add(key);
+    console.log(`[World] Block changed at (${x},${y},${z}) - Chunk (${chunkX},${chunkY},${chunkZ}) marked as modified (${this.modifiedChunks.size} total)`);
   }
 
   getBlock(x: number, y: number, z: number): number {

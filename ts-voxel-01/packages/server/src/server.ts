@@ -21,7 +21,7 @@ export class GameServer {
     const worldPath = join(process.cwd(), 'tmp', 'world');
 
     this.world = new World(
-      { seed, chunkSize: 32, worldHeight: 256 },
+      { seed, chunkSize: 32, worldSize: 256 },
       generatorType,
       worldPath
     );
