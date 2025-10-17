@@ -14,6 +14,7 @@ export * from './models/World.js';
 export * from './models/Inventory.js';
 export * from './models/ChunkData.js';
 export * from './models/BlockMetadata.js';
+export * from './models/AssetManifest.js';
 
 // Registry System
 export * from './registry/index.js';

@@ -8,10 +8,11 @@ import { WebSocketClient } from './network/WebSocketClient';
 import { ChunkManager } from './world/ChunkManager';
 import { PlayerController } from './player/PlayerController';
 import { ClientRegistry } from './registry/ClientRegistry';
+import { ClientAssetManager } from './assets/ClientAssetManager';
 import { TextureAtlas } from './rendering/TextureAtlas';
 import { createDefaultAtlasConfig } from './rendering/defaultAtlasConfig';
-import { RegistryMessageType, createRegistryAckMessage } from '@voxel-02/protocol';
-import type { RegistryMessage } from '@voxel-02/protocol';
+import { RegistryMessageType, AssetMessageType, createRegistryAckMessage } from '@voxel-02/protocol';
+import type { RegistryMessage, AssetMessage } from '@voxel-02/protocol';
 
 /**
  * Main client class for VoxelSrv
@@ -26,12 +27,14 @@ export class VoxelClient {
   private chunkManager?: ChunkManager;
   private playerController?: PlayerController;
   private registry: ClientRegistry;
+  private assetManager: ClientAssetManager;
   private atlas?: TextureAtlas;
   private connected = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.registry = new ClientRegistry();
+    this.assetManager = new ClientAssetManager();
   }
 
   /**
@@ -58,11 +61,11 @@ export class VoxelClient {
     const light = new HemisphericLight('light', new Vector3(0, 1, 0), this.scene);
     light.intensity = 0.7;
 
-    // Initialize texture atlas
-    console.log('[Client] Loading texture atlas...');
+    // Initialize texture atlas (will be loaded after server connection provides asset URL)
+    console.log('[Client] Preparing texture atlas...');
     this.atlas = new TextureAtlas(this.scene, createDefaultAtlasConfig());
-    await this.atlas.load();
-    console.log('[Client] Texture atlas loaded');
+    // Note: Atlas will be loaded after connecting to server and receiving asset manifest
+    console.log('[Client] Texture atlas prepared (will load from server)');
 
     // Resize handler
     window.addEventListener('resize', () => {
@@ -120,7 +123,8 @@ export class VoxelClient {
         }
         this.chunkManager = new ChunkManager(this.socket, this.scene, this.atlas, this.registry);
 
-        // Setup registry message handler
+        // Setup message handlers
+        this.setupAssetHandler();
         this.setupRegistryHandler();
 
         // Connect to server
@@ -165,6 +169,42 @@ export class VoxelClient {
 
     // Setup pointer lock on canvas click (must be after connection is established)
     this.setupPointerLock();
+  }
+
+  /**
+   * Setup asset manifest handler
+   */
+  private setupAssetHandler(): void {
+    if (!this.socket) return;
+
+    // Listen for asset manifest
+    this.socket.on(AssetMessageType.ASSET_MANIFEST, async (message: AssetMessage) => {
+      if (message.type === AssetMessageType.ASSET_MANIFEST) {
+        console.log('[Client] Received asset manifest from server');
+
+        // Load manifest
+        await this.assetManager.loadManifest(message.data);
+
+        console.log('[Client] Asset manifest loaded');
+
+        // Load texture atlas from server
+        if (this.atlas) {
+          const atlasUrl = this.assetManager.getAssetUrl('textures/atlas');
+          if (atlasUrl) {
+            // Update atlas config with server URL
+            const config = this.atlas.getConfig();
+            config.texturePath = atlasUrl;
+
+            console.log(`[Client] Loading texture atlas from server: ${atlasUrl}`);
+            await this.atlas.load();
+            console.log('[Client] Texture atlas loaded from server');
+          } else {
+            console.warn('[Client] Atlas texture not found in manifest, using local fallback');
+            await this.atlas.load();
+          }
+        }
+      }
+    });
   }
 
   /**

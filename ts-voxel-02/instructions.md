@@ -200,6 +200,6 @@ Auch die Generatoren sollen die Typen geim generieren nutzen.
   - Kompressionfür Registry-Sync (Protobuf/MessagePack)
 ```
 ---
-> Wenn du auch die assets, also texturen, modelle, sounds durch den server ausliefern kannst, verschiebe diese dateien vom 
+Wenn du auch die assets, also texturen, modelle, sounds durch den server ausliefern kannst, verschiebe diese dateien vom 
 client in den server und passe server und client an.
 ---

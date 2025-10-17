@@ -8,15 +8,20 @@ import { WorldManager } from './world/WorldManager.js';
 import { EntityManager } from './entities/EntityManager.js';
 import { FlatWorldGenerator } from './world/generators/FlatWorldGenerator.js';
 import { NormalWorldGenerator } from './world/generators/NormalWorldGenerator.js';
+import { AssetManager } from './assets/AssetManager.js';
+import { AssetServer } from './assets/AssetServer.js';
 import { ALL_DEFAULT_BLOCKS } from '@voxel-02/core';
-import { createRegistrySyncMessage } from '@voxel-02/protocol';
+import { createRegistrySyncMessage, createAssetManifestMessage } from '@voxel-02/protocol';
 import type { World } from './world/World.js';
+import * as path from 'path';
 
 export interface ServerConfig {
   port: number;
+  httpPort?: number;  // Optional HTTP port for assets (defaults to port + 1)
   worldName: string;
   worldSeed: number;
   generator: 'flat' | 'normal';
+  assetsDir?: string;  // Optional assets directory (defaults to './assets')
 }
 
 /**
@@ -25,10 +30,12 @@ export interface ServerConfig {
 export class VoxelServer {
   private config: ServerConfig;
   private wss?: WebSocketServer;
+  private assetServer?: AssetServer;
 
   readonly registry: Registry;
   readonly worldManager: WorldManager;
   readonly entityManager: EntityManager;
+  readonly assetManager: AssetManager;
 
   private mainWorld?: World;
   private running = false;
@@ -40,6 +47,12 @@ export class VoxelServer {
     this.registry = new Registry();
     this.worldManager = new WorldManager(this.registry);
     this.entityManager = new EntityManager();
+
+    // Initialize asset manager
+    const assetsDir = config.assetsDir || path.join(process.cwd(), 'assets');
+    const httpPort = config.httpPort || config.port + 1;
+    const baseUrl = `http://localhost:${httpPort}/assets`;
+    this.assetManager = new AssetManager(assetsDir, baseUrl);
 
     // Register world generators
     this.worldManager.addGenerator('flat', FlatWorldGenerator);
@@ -112,6 +125,14 @@ export class VoxelServer {
   async start(): Promise<void> {
     console.log('[Server] Starting VoxelSrv server...');
 
+    // Initialize asset manager
+    await this.assetManager.initialize();
+
+    // Start asset HTTP server
+    const httpPort = this.config.httpPort || this.config.port + 1;
+    this.assetServer = new AssetServer(this.assetManager, httpPort);
+    await this.assetServer.start();
+
     // Finalize registry
     this.registry.loadPalette();
     this.registry.finalize();
@@ -142,6 +163,7 @@ export class VoxelServer {
     this.running = true;
 
     console.log(`[Server] Server started on port ${this.config.port}`);
+    console.log(`[Server] Asset HTTP server on port ${httpPort}`);
     console.log(`[Server] World: ${this.config.worldName} (seed: ${this.config.worldSeed})`);
     console.log(`[Server] Generator: ${this.config.generator}`);
   }
@@ -153,6 +175,11 @@ export class VoxelServer {
     console.log('[Server] Stopping server...');
 
     this.running = false;
+
+    // Close asset HTTP server
+    if (this.assetServer) {
+      await this.assetServer.stop();
+    }
 
     // Close WebSocket server
     if (this.wss) {
@@ -189,8 +216,22 @@ export class VoxelServer {
       message: 'Welcome to VoxelSrv!',
     }));
 
+    // Send asset manifest
+    this.sendAssetManifest(ws);
+
     // Send registry sync (dynamic block/item/entity definitions)
     this.sendRegistrySync(ws);
+  }
+
+  /**
+   * Send asset manifest to client
+   */
+  private sendAssetManifest(ws: WebSocket): void {
+    const manifest = this.assetManager.getManifest();
+    const assetMessage = createAssetManifestMessage(manifest);
+
+    ws.send(JSON.stringify(assetMessage));
+    console.log(`[Server] Sent asset manifest: ${manifest.assets.length} assets`);
   }
 
   /**
