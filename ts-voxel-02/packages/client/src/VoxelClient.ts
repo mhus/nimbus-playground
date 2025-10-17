@@ -3,6 +3,7 @@
  */
 
 import { Engine, Scene, FreeCamera, Vector3, HemisphericLight, MeshBuilder } from '@babylonjs/core';
+import { MainMenu, type ServerInfo } from './gui/MainMenu';
 
 /**
  * Main client class for VoxelSrv
@@ -12,6 +13,8 @@ export class VoxelClient {
   private engine?: Engine;
   private scene?: Scene;
   private camera?: FreeCamera;
+  private mainMenu?: MainMenu;
+  private connected = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -33,14 +36,9 @@ export class VoxelClient {
     this.scene = new Scene(this.engine);
     this.scene.clearColor.set(0.5, 0.7, 1.0, 1.0);  // Sky blue
 
-    // Create camera
+    // Create camera (detached initially)
     this.camera = new FreeCamera('camera', new Vector3(0, 10, -20), this.scene);
     this.camera.setTarget(Vector3.Zero());
-    this.camera.attachControl(this.canvas, true);
-
-    // Movement settings
-    this.camera.speed = 0.5;
-    this.camera.angularSensibility = 2000;
 
     // Create light
     const light = new HemisphericLight('light', new Vector3(0, 1, 0), this.scene);
@@ -63,7 +61,44 @@ export class VoxelClient {
       this.scene?.render();
     });
 
+    // Show main menu
+    this.showMainMenu();
+
     console.log('[Client] Initialized successfully');
+  }
+
+  /**
+   * Show main menu
+   */
+  private showMainMenu(): void {
+    if (!this.scene) return;
+
+    this.mainMenu = new MainMenu(this.scene);
+    this.mainMenu.show((serverInfo: ServerInfo) => {
+      this.connectToServer(serverInfo);
+    });
+  }
+
+  /**
+   * Connect to server
+   */
+  private async connectToServer(serverInfo: ServerInfo): Promise<void> {
+    console.log('[Client] Connecting to server:', serverInfo);
+
+    if (serverInfo.address === 'embedded') {
+      console.log('[Client] Starting singleplayer (embedded server)...');
+      // TODO: Start embedded server
+    } else {
+      console.log(`[Client] Connecting to ${serverInfo.address}:${serverInfo.port}...`);
+      // TODO: Connect via WebSocket
+    }
+
+    // Enable camera controls
+    this.camera?.attachControl(this.canvas, true);
+    this.camera!.speed = 0.5;
+    this.camera!.angularSensibility = 2000;
+
+    this.connected = true;
   }
 
   /**

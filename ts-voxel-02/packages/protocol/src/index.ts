@@ -7,7 +7,7 @@
 
 // Re-export generated protobuf code
 // Note: Run 'npm run generate' to create these files
-export * from './generated/protocol.js';
+// export * from './generated/protocol.js';
 
 // Protocol handlers
 export * from './handlers/index.js';

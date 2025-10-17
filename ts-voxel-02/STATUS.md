@@ -73,6 +73,15 @@
   - Loading-Screen
   - Basis-Styling
 
+- **Main Menu GUI** ⭐ NEU:
+  - Server-Name Input
+  - Server-Adresse Input
+  - Port Input
+  - "Connect to Server" Button
+  - "Play Singleplayer" Button
+  - Logo-Integration
+  - Styled mit Babylon.js GUI
+
 ## Projektstruktur
 
 ```

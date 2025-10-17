@@ -8,8 +8,9 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
+    "build:deps": "npm run build -w @voxel-02/core && npm run build -w @voxel-02/protocol",
     "dev:client": "npm run dev -w @voxel-02/client",
-    "dev:server": "npm run dev -w @voxel-02/server",
+    "dev:server": "npm run build:deps && npm run dev -w @voxel-02/server",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules"
   },
   "devDependencies": {

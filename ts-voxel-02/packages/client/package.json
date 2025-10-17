@@ -8,9 +8,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@voxel-02/core": "workspace:*",
-    "@voxel-02/protocol": "workspace:*",
-    "@voxel-02/server": "workspace:*",
+    "@voxel-02/core": "*",
+    "@voxel-02/protocol": "*",
+    "@voxel-02/server": "*",
     "@babylonjs/core": "^7.37.1",
     "@babylonjs/gui": "^7.37.1",
     "@babylonjs/materials": "^7.37.1",
