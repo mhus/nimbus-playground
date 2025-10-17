@@ -30,3 +30,4 @@ jmonkey-example03-native
 node_modules
 dist
 tmp/
+/ts-voxel-02/packages/server/worlds/world/chunks/
