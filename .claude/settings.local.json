@@ -8,7 +8,10 @@
       "Bash(timeout 5 npm run dev:server:*)",
       "Bash(npm run dev:client:*)",
       "Bash(lsof:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm start)",
+      "Bash(npm run dev:*)",
+      "Bash(xargs kill:*)"
     ],
     "deny": [],
     "ask": []

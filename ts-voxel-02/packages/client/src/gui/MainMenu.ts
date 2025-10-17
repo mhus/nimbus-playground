@@ -3,7 +3,7 @@
  */
 
 import { AdvancedDynamicTexture, Rectangle, TextBlock, Button, InputText, StackPanel, Control, Image } from '@babylonjs/gui';
-import type { Scene } from '@babylonjs/core';
+import { Scene, MeshBuilder, StandardMaterial, Texture, Vector3 } from '@babylonjs/core';
 
 export interface ServerInfo {
   name: string;
@@ -18,10 +18,45 @@ export class MainMenu {
   private guiTexture: AdvancedDynamicTexture;
   private mainContainer?: Rectangle;
   private onConnect?: (server: ServerInfo) => void;
+  private scene: Scene;
+  private testCube?: any;
 
   constructor(scene: Scene) {
+    this.scene = scene;
     // Create fullscreen GUI
     this.guiTexture = AdvancedDynamicTexture.CreateFullscreenUI('MainMenuUI', true, scene);
+
+    // Create test cube with grass texture
+    this.createTestCube();
+  }
+
+  /**
+   * Create test cube with grass texture
+   */
+  private createTestCube(): void {
+    console.log('[MainMenu] Creating test cube with grass texture');
+
+    // Create a simple box - positioned in camera view
+    // Camera is at (0, 80, 0) looking at (10, 79, 10)
+    const box = MeshBuilder.CreateBox('testCube', { size: 4 }, this.scene);
+    box.position = new Vector3(5, 79, 5); // Halfway between camera position and target
+
+    // Create material with grass texture
+    const material = new StandardMaterial('testMaterial', this.scene);
+    material.diffuseTexture = new Texture('http://localhost:3004/assets/textures/block/grass.png', this.scene);
+
+    box.material = material;
+    this.testCube = box;
+
+    // Animate rotation
+    this.scene.registerBeforeRender(() => {
+      if (this.testCube) {
+        this.testCube.rotation.y += 0.01;
+        this.testCube.rotation.x += 0.005;
+      }
+    });
+
+    console.log('[MainMenu] Test cube created at position:', box.position);
   }
 
   /**
@@ -236,5 +271,11 @@ export class MainMenu {
   dispose(): void {
     this.hide();
     this.guiTexture.dispose();
+
+    // Dispose test cube
+    if (this.testCube) {
+      this.testCube.dispose();
+      this.testCube = undefined;
+    }
   }
 }
