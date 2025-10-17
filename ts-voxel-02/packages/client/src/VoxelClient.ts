@@ -6,6 +6,7 @@ import { Engine, Scene, FreeCamera, Vector3, HemisphericLight, MeshBuilder } fro
 import { MainMenu, type ServerInfo } from './gui/MainMenu';
 import { WebSocketClient } from './network/WebSocketClient';
 import { ChunkManager } from './world/ChunkManager';
+import { PlayerController } from './player/PlayerController';
 
 /**
  * Main client class for VoxelSrv
@@ -18,6 +19,7 @@ export class VoxelClient {
   private mainMenu?: MainMenu;
   private socket?: WebSocketClient;
   private chunkManager?: ChunkManager;
+  private playerController?: PlayerController;
   private connected = false;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -109,6 +111,9 @@ export class VoxelClient {
         // Request chunks around spawn (0, 0) immediately after connection
         this.chunkManager.requestChunksAround(0, 0, 3);
 
+        // Create player controller for physics and collision
+        this.playerController = new PlayerController(this.scene, this.camera, this.chunkManager);
+
         // Listen for disconnect
         this.socket.on('PlayerKick', (data) => {
           console.log('[Client] Disconnected:', data.reason);
@@ -124,10 +129,17 @@ export class VoxelClient {
       }
     }
 
-    // Enable camera controls
+    // Enable camera mouse look only (movement handled by PlayerController)
     this.camera?.attachControl(this.canvas, true);
-    this.camera!.speed = 0.5;
     this.camera!.angularSensibility = 2000;
+
+    // Disable default keyboard controls (PlayerController handles movement)
+    this.camera!.keysUp = [];
+    this.camera!.keysDown = [];
+    this.camera!.keysLeft = [];
+    this.camera!.keysRight = [];
+    this.camera!.keysUpward = [];
+    this.camera!.keysDownward = [];
 
     this.connected = true;
 

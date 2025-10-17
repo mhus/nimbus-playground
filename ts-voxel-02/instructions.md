@@ -156,7 +156,10 @@ Warum uebernimmst du das system nicht von `ts-voxel-02/tmp/voxelsrv`? Das ist wa
 ---
 Wenn ich in den bildschirm clicke soll der mauszeiger verschwinden und die steuerung ohne gehaltene taste funktionieren.
 ---
+Es fehlt noch collision detection. Wenn ich auf einen Block stosse kann ich nicht weiter durch den Block 'gehen'.
+
+Es soll einen unterscheidliche vortbewegungen geben. Bei Walking wird man durch gravitation auf den boden gezogen. Mit space kann man dann springen.
+Mit der F Taste kann man zwischen flight und walk mode wechseln. Im Flight mode gibt es keine gravitation.
+---
 > Es fehlen noch die texturen auf den voxels. Kannst du das noch von `ts-voxel-02/tmp/voxelsrv` uebernehmen? Oder wird das vom Server nicht geschickt?
 ---
-> Es soll einen unterscheidliche vortbewegungen geben. Bei Walking wird man durch gravitation auf den boden gezogen. Mit space kann man dann springen.
-Mit der F Taste kann man zwischen flight und walk mode wechseln. Im Flight mode gibt es keine gravitation.
