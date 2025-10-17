@@ -156,7 +156,7 @@ export class ChunkManager {
   /**
    * Render chunk
    */
-  private renderChunk(chunk: ChunkData): void {
+  private async renderChunk(chunk: ChunkData): Promise<void> {
     const key = this.getChunkKey(chunk.chunkX, chunk.chunkZ);
 
     // Remove old mesh if exists
@@ -165,8 +165,8 @@ export class ChunkManager {
       oldMesh.dispose();
     }
 
-    // Create new mesh
-    const mesh = this.renderer.createChunkMesh(chunk);
+    // Create new mesh (async - loads textures into atlas)
+    const mesh = await this.renderer.createChunkMesh(chunk);
     this.chunkMeshes.set(key, mesh);
 
     console.log(`[ChunkManager] Rendered chunk ${chunk.chunkX},${chunk.chunkZ}`);

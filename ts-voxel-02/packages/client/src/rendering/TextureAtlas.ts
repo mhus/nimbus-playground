@@ -1,12 +1,13 @@
 /**
- * Texture Atlas System
+ * Dynamic Texture Atlas System
  *
- * Manages a single texture atlas containing all block textures
- * for efficient rendering with a single material.
+ * Loads individual textures from the asset server and builds a dynamic texture atlas
+ * at runtime for efficient rendering.
  */
 
-import { Texture, StandardMaterial, Color3, Scene } from '@babylonjs/core';
+import { DynamicTexture, StandardMaterial, Color3, Scene, RawTexture } from '@babylonjs/core';
 import type { BlockType } from '@voxel-02/core';
+import type { ClientAssetManager } from '../assets/ClientAssetManager';
 
 /**
  * UV coordinates for a texture in the atlas
@@ -35,87 +36,167 @@ export interface BlockFaceUVs {
  * Configuration for the texture atlas
  */
 export interface AtlasConfig {
-  /** Path to atlas texture */
-  texturePath: string;
+  /** Base URL for asset server */
+  assetServerUrl: string;
 
-  /** Size of individual textures in pixels */
-  textureSize: number;
+  /** Asset manager instance */
+  assetManager?: ClientAssetManager;
 
-  /** Total width of atlas in pixels */
-  atlasWidth: number;
+  /** Size of individual textures in pixels (default: 16) */
+  textureSize?: number;
 
-  /** Total height of atlas in pixels */
-  atlasHeight: number;
-
-  /** Mapping of texture names to atlas positions */
-  textureMap: Map<string, { x: number; y: number }>;
+  /** Maximum atlas size in pixels (default: 2048) */
+  maxAtlasSize?: number;
 }
 
 /**
- * Texture Atlas Manager
+ * Dynamic Texture Atlas - Builds runtime atlas from server textures
  */
 export class TextureAtlas {
   private scene: Scene;
   private config: AtlasConfig;
-  private texture?: Texture;
+  private assetManager?: ClientAssetManager;
+
+  // Atlas configuration
+  private textureSize: number;
+  private maxAtlasSize: number;
+  private texturesPerRow: number;
+  private uvSize: number;
+
+  // Dynamic atlas canvas and texture
+  private atlasCanvas?: HTMLCanvasElement;
+  private atlasContext?: CanvasRenderingContext2D;
+  private atlasTexture?: DynamicTexture;
   private material?: StandardMaterial;
 
-  // Cache for block UV mappings
+  // Texture tracking
+  private textureMap: Map<string, { x: number; y: number }> = new Map();
+  private nextSlot = 0;
+  private textureLoaded: Set<string> = new Set();
+
+  // Cache
   private blockUVCache: Map<string, BlockFaceUVs> = new Map();
-
-  // Textures per row/column in atlas
-  private texturesPerRow: number;
-  private texturesPerColumn: number;
-
-  // UV size for a single texture
-  private uvSize: number;
 
   constructor(scene: Scene, config: AtlasConfig) {
     this.scene = scene;
     this.config = config;
+    this.assetManager = config.assetManager;
 
-    this.texturesPerRow = config.atlasWidth / config.textureSize;
-    this.texturesPerColumn = config.atlasHeight / config.textureSize;
+    this.textureSize = config.textureSize || 16;
+    this.maxAtlasSize = config.maxAtlasSize || 2048;
+    this.texturesPerRow = Math.floor(this.maxAtlasSize / this.textureSize);
     this.uvSize = 1.0 / this.texturesPerRow;
 
-    console.log(`[TextureAtlas] Initialized: ${this.texturesPerRow}x${this.texturesPerColumn} textures`);
+    console.log(`[TextureAtlas] Initialized dynamic atlas: ${this.texturesPerRow}x${this.texturesPerRow} slots (${this.maxAtlasSize}x${this.maxAtlasSize}px)`);
   }
 
   /**
-   * Load the atlas texture and create material
+   * Set asset manager (if not provided in constructor)
+   */
+  setAssetManager(assetManager: ClientAssetManager): void {
+    this.assetManager = assetManager;
+  }
+
+  /**
+   * Initialize the dynamic texture atlas
    */
   async load(): Promise<void> {
-    console.log(`[TextureAtlas] Loading atlas from ${this.config.texturePath}...`);
+    console.log('[TextureAtlas] Creating dynamic texture atlas...');
 
-    this.texture = new Texture(this.config.texturePath, this.scene);
+    // Create canvas for atlas
+    this.atlasCanvas = document.createElement('canvas');
+    this.atlasCanvas.width = this.maxAtlasSize;
+    this.atlasCanvas.height = this.maxAtlasSize;
+    this.atlasContext = this.atlasCanvas.getContext('2d', { willReadFrequently: true })!;
 
-    // Create shared material for all blocks
+    // Fill with magenta background (missing texture indicator)
+    this.atlasContext.fillStyle = '#FF00FF';
+    this.atlasContext.fillRect(0, 0, this.maxAtlasSize, this.maxAtlasSize);
+
+    // Create dynamic texture from canvas
+    this.atlasTexture = new DynamicTexture('dynamicAtlas', {
+      width: this.maxAtlasSize,
+      height: this.maxAtlasSize
+    }, this.scene, false);
+
+    // Create material
     this.material = new StandardMaterial('atlasMaterial', this.scene);
-    this.material.diffuseTexture = this.texture;
+    this.material.diffuseTexture = this.atlasTexture;
     this.material.specularColor = new Color3(0, 0, 0);
     this.material.backFaceCulling = true;
 
-    // Wait for texture to load
-    await new Promise<void>((resolve) => {
-      if (this.texture!.isReady()) {
-        resolve();
-      } else {
-        this.texture!.onLoadObservable.addOnce(() => resolve());
-      }
-    });
-
-    console.log('[TextureAtlas] Atlas loaded successfully');
+    console.log('[TextureAtlas] Dynamic atlas created');
   }
 
   /**
-   * Get UV coordinates for a texture name
+   * Load a texture into the dynamic atlas
    */
-  getTextureUV(textureName: string): AtlasUV | null {
-    const pos = this.config.textureMap.get(textureName);
-    if (!pos) {
-      console.warn(`[TextureAtlas] Texture not found: ${textureName}`);
-      return null;
+  async loadTextureIntoAtlas(texturePath: string): Promise<{ x: number; y: number }> {
+    // Check if already loaded
+    if (this.textureMap.has(texturePath)) {
+      return this.textureMap.get(texturePath)!;
     }
+
+    // Check if we have space
+    const maxSlots = this.texturesPerRow * this.texturesPerRow;
+    if (this.nextSlot >= maxSlots) {
+      console.warn(`[TextureAtlas] Atlas full! Cannot load texture: ${texturePath}`);
+      return { x: 0, y: 0 }; // Return first slot (magenta)
+    }
+
+    // Calculate slot position
+    const slotX = this.nextSlot % this.texturesPerRow;
+    const slotY = Math.floor(this.nextSlot / this.texturesPerRow);
+    this.nextSlot++;
+
+    console.log(`[TextureAtlas] Loading texture into slot ${slotX},${slotY}: ${texturePath}`);
+
+    try {
+      // Load image
+      const img = await this.loadImage(`${this.config.assetServerUrl}/${texturePath}`);
+
+      // Draw into atlas
+      const pixelX = slotX * this.textureSize;
+      const pixelY = slotY * this.textureSize;
+      this.atlasContext!.drawImage(img, pixelX, pixelY, this.textureSize, this.textureSize);
+
+      // Update dynamic texture
+      this.atlasTexture!.update();
+
+      // Cache position
+      const position = { x: slotX, y: slotY };
+      this.textureMap.set(texturePath, position);
+      this.textureLoaded.add(texturePath);
+
+      return position;
+    } catch (error) {
+      console.error(`[TextureAtlas] Failed to load texture ${texturePath}:`, error);
+      return { x: 0, y: 0 }; // Return first slot (magenta)
+    }
+  }
+
+  /**
+   * Load image from URL
+   */
+  private loadImage(url: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+      img.src = url;
+    });
+  }
+
+  /**
+   * Get UV coordinates for a texture in the atlas
+   */
+  async getTextureUV(textureName: string): Promise<AtlasUV> {
+    // Normalize texture path
+    const path = this.normalizeTexturePath(textureName);
+
+    // Ensure texture is loaded into atlas
+    const pos = await this.loadTextureIntoAtlas(path);
 
     // Calculate UV coordinates
     const u0 = pos.x * this.uvSize;
@@ -128,8 +209,9 @@ export class TextureAtlas {
 
   /**
    * Get UV mapping for a block (with face-specific textures)
+   * Loads textures into atlas dynamically
    */
-  getBlockUVs(block: BlockType): BlockFaceUVs {
+  async getBlockUVs(block: BlockType): Promise<BlockFaceUVs> {
     // Check cache
     if (this.blockUVCache.has(block.name)) {
       return this.blockUVCache.get(block.name)!;
@@ -139,7 +221,7 @@ export class TextureAtlas {
 
     if (typeof block.texture === 'string') {
       // Single texture for all faces
-      const uv = this.getTextureUV(block.texture) || this.getDefaultUV();
+      const uv = await this.getTextureUV(block.texture);
       faceUVs = {
         top: uv,
         bottom: uv,
@@ -148,7 +230,7 @@ export class TextureAtlas {
     } else if (Array.isArray(block.texture)) {
       if (block.texture.length === 1) {
         // Single texture
-        const uv = this.getTextureUV(block.texture[0]) || this.getDefaultUV();
+        const uv = await this.getTextureUV(block.texture[0]);
         faceUVs = {
           top: uv,
           bottom: uv,
@@ -156,8 +238,8 @@ export class TextureAtlas {
         };
       } else if (block.texture.length === 2) {
         // Top/bottom, sides
-        const topUV = this.getTextureUV(block.texture[0]) || this.getDefaultUV();
-        const sideUV = this.getTextureUV(block.texture[1]) || this.getDefaultUV();
+        const topUV = await this.getTextureUV(block.texture[0]);
+        const sideUV = await this.getTextureUV(block.texture[1]);
         faceUVs = {
           top: topUV,
           bottom: topUV,
@@ -165,9 +247,9 @@ export class TextureAtlas {
         };
       } else if (block.texture.length === 3) {
         // Top, bottom, sides
-        const topUV = this.getTextureUV(block.texture[0]) || this.getDefaultUV();
-        const bottomUV = this.getTextureUV(block.texture[1]) || this.getDefaultUV();
-        const sideUV = this.getTextureUV(block.texture[2]) || this.getDefaultUV();
+        const topUV = await this.getTextureUV(block.texture[0]);
+        const bottomUV = await this.getTextureUV(block.texture[1]);
+        const sideUV = await this.getTextureUV(block.texture[2]);
         faceUVs = {
           top: topUV,
           bottom: bottomUV,
@@ -175,22 +257,29 @@ export class TextureAtlas {
         };
       } else {
         // Top, bottom, north, south, east, west
+        const topUV = await this.getTextureUV(block.texture[0]);
+        const bottomUV = await this.getTextureUV(block.texture[1]);
+        const northUV = await this.getTextureUV(block.texture[2]);
+        const southUV = await this.getTextureUV(block.texture[3] || block.texture[2]);
+        const eastUV = await this.getTextureUV(block.texture[4] || block.texture[2]);
+        const westUV = await this.getTextureUV(block.texture[5] || block.texture[2]);
         faceUVs = {
-          top: this.getTextureUV(block.texture[0]) || this.getDefaultUV(),
-          bottom: this.getTextureUV(block.texture[1]) || this.getDefaultUV(),
-          sides: this.getTextureUV(block.texture[2]) || this.getDefaultUV(),
-          north: this.getTextureUV(block.texture[2]) || this.getDefaultUV(),
-          south: this.getTextureUV(block.texture[3] || block.texture[2]) || this.getDefaultUV(),
-          east: this.getTextureUV(block.texture[4] || block.texture[2]) || this.getDefaultUV(),
-          west: this.getTextureUV(block.texture[5] || block.texture[2]) || this.getDefaultUV(),
+          top: topUV,
+          bottom: bottomUV,
+          sides: northUV,
+          north: northUV,
+          south: southUV,
+          east: eastUV,
+          west: westUV,
         };
       }
     } else {
       // Default fallback
+      const defaultUV = await this.getTextureUV('stone');
       faceUVs = {
-        top: this.getDefaultUV(),
-        bottom: this.getDefaultUV(),
-        sides: this.getDefaultUV(),
+        top: defaultUV,
+        bottom: defaultUV,
+        sides: defaultUV,
       };
     }
 
@@ -201,36 +290,49 @@ export class TextureAtlas {
   }
 
   /**
-   * Get default UV (missing texture placeholder)
+   * Normalize texture path (add .png extension if missing)
    */
-  private getDefaultUV(): AtlasUV {
-    // Return UV for "missing" texture (usually magenta/black checkerboard)
-    return this.getTextureUV('missing') || { u0: 0, v0: 0, u1: this.uvSize, v1: this.uvSize };
+  private normalizeTexturePath(path: string): string {
+    // If path starts with 'block/', prepend 'textures/'
+    if (path.startsWith('block/')) {
+      path = `textures/${path}`;
+    }
+    // If path doesn't start with 'textures/', prepend 'textures/block/'
+    else if (!path.startsWith('textures/')) {
+      path = `textures/block/${path}`;
+    }
+
+    // Add .png extension if missing
+    if (!path.endsWith('.png')) {
+      path = `${path}.png`;
+    }
+
+    return path;
   }
 
   /**
-   * Get the shared material for all blocks
+   * Get the atlas material
    */
   getMaterial(): StandardMaterial | undefined {
     return this.material;
   }
 
   /**
-   * Get texture atlas instance
+   * Get the dynamic atlas texture
    */
-  getTexture(): Texture | undefined {
-    return this.texture;
+  getTexture(): DynamicTexture | undefined {
+    return this.atlasTexture;
   }
 
   /**
-   * Check if atlas is loaded
+   * Check if texture system is ready
    */
   isReady(): boolean {
-    return this.texture?.isReady() === true;
+    return this.atlasTexture !== undefined && this.material !== undefined;
   }
 
   /**
-   * Clear UV cache (call when blocks change)
+   * Clear caches (call when blocks change)
    */
   clearCache(): void {
     this.blockUVCache.clear();
@@ -242,5 +344,17 @@ export class TextureAtlas {
    */
   getConfig(): AtlasConfig {
     return this.config;
+  }
+
+  /**
+   * Get atlas statistics
+   */
+  getStats(): { loadedTextures: number; totalSlots: number; usedSlots: number } {
+    const totalSlots = this.texturesPerRow * this.texturesPerRow;
+    return {
+      loadedTextures: this.textureLoaded.size,
+      totalSlots,
+      usedSlots: this.nextSlot,
+    };
   }
 }

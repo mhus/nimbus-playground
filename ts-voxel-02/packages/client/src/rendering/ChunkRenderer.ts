@@ -40,9 +40,9 @@ export class ChunkRenderer {
 
 
   /**
-   * Create mesh from chunk data using texture atlas
+   * Create mesh from chunk data using dynamic texture atlas
    */
-  createChunkMesh(chunk: ChunkData): Mesh {
+  async createChunkMesh(chunk: ChunkData): Promise<Mesh> {
     const data = chunk.data;
     const height = chunk.height || 256;
 
@@ -70,8 +70,8 @@ export class ChunkRenderer {
             continue;
           }
 
-          // Get UV mapping for this block
-          const blockUVs = this.atlas.getBlockUVs(block);
+          // Get UV mapping for this block (loads texture into atlas if needed)
+          const blockUVs = await this.atlas.getBlockUVs(block);
 
           // Get metadata if available
           const packedMetadata = chunk.metadata?.[index] || 0;

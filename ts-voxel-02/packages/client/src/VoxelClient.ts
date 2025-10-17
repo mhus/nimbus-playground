@@ -61,11 +61,13 @@ export class VoxelClient {
     const light = new HemisphericLight('light', new Vector3(0, 1, 0), this.scene);
     light.intensity = 0.7;
 
-    // Initialize texture atlas (will be loaded after server connection provides asset URL)
-    console.log('[Client] Preparing texture atlas...');
+    // Initialize texture atlas (will be configured with server URL later)
+    // Note: Asset server URL will be set when connecting to server
+    console.log('[Client] Initializing texture system...');
     this.atlas = new TextureAtlas(this.scene, createDefaultAtlasConfig());
-    // Note: Atlas will be loaded after connecting to server and receiving asset manifest
-    console.log('[Client] Texture atlas prepared (will load from server)');
+    this.atlas.setAssetManager(this.assetManager);
+    await this.atlas.load();
+    console.log('[Client] Texture system initialized');
 
     // Resize handler
     window.addEventListener('resize', () => {
@@ -117,10 +119,20 @@ export class VoxelClient {
         this.socket = new WebSocketClient();
         const serverUrl = `ws://${serverInfo.address}:${serverInfo.port}`;
 
-        // Create chunk manager with atlas and registry
+        // Update atlas with asset server URL (port + 1)
+        const assetServerPort = serverInfo.port + 1;
+        const assetServerUrl = `http://${serverInfo.address}:${assetServerPort}/assets`;
+        console.log(`[Client] Asset server URL: ${assetServerUrl}`);
+
         if (!this.atlas) {
           throw new Error('Texture atlas not initialized');
         }
+
+        // Update atlas config with correct asset server URL
+        const config = this.atlas.getConfig();
+        config.assetServerUrl = assetServerUrl;
+
+        // Create chunk manager with atlas and registry
         this.chunkManager = new ChunkManager(this.socket, this.scene, this.atlas, this.registry);
 
         // Setup message handlers
@@ -186,19 +198,7 @@ export class VoxelClient {
         await this.assetManager.loadManifest(message.data);
 
         console.log('[Client] Asset manifest loaded');
-
-        // Load texture atlas from server
-        if (this.atlas) {
-          // For now, use local atlas until server atlas is generated
-          // TODO: Generate atlas on server or load individual textures
-          console.log('[Client] Loading local texture atlas (server atlas not yet generated)');
-          try {
-            await this.atlas.load();
-            console.log('[Client] Texture atlas loaded');
-          } catch (error) {
-            console.error('[Client] Failed to load texture atlas:', error);
-          }
-        }
+        // Note: Texture atlas is already loaded during init()
       }
     });
   }
