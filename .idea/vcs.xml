@@ -3,7 +3,5 @@
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/ts-voxel-01/tmp/voxelsrv" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/ts-voxel-01/tmp/voxelsrv-server" vcs="Git" />
   </component>
 </project>
