@@ -114,6 +114,9 @@ export class VoxelClient {
         // Create player controller for physics and collision
         this.playerController = new PlayerController(this.scene, this.camera, this.chunkManager);
 
+        // Setup debug key
+        this.setupDebugKey();
+
         // Listen for disconnect
         this.socket.on('PlayerKick', (data) => {
           console.log('[Client] Disconnected:', data.reason);
@@ -145,6 +148,157 @@ export class VoxelClient {
 
     // Setup pointer lock on canvas click (must be after connection is established)
     this.setupPointerLock();
+  }
+
+  /**
+   * Setup debug key (backslash) for world dump
+   */
+  private setupDebugKey(): void {
+    if (!this.scene) return;
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === '\\') {
+        this.dumpWorldDebugInfo();
+      }
+    });
+  }
+
+  /**
+   * Dump world debug information to console
+   */
+  private dumpWorldDebugInfo(): void {
+    console.log('\n========================================');
+    console.log('🌍 WORLD DEBUG DUMP');
+    console.log('========================================\n');
+
+    // Camera/Player position
+    if (this.camera) {
+      const pos = this.camera.position;
+      const blockPos = {
+        x: Math.floor(pos.x),
+        y: Math.floor(pos.y),
+        z: Math.floor(pos.z),
+      };
+      console.log('📍 Player Position:');
+      console.log(`   World: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`);
+      console.log(`   Block: (${blockPos.x}, ${blockPos.y}, ${blockPos.z})`);
+      console.log(`   Chunk: (${Math.floor(blockPos.x / 32)}, ${Math.floor(blockPos.z / 32)})`);
+    }
+
+    // Player controller info
+    if (this.playerController) {
+      const mode = this.playerController.getMode();
+      console.log(`\n🎮 Player Mode: ${mode.toUpperCase()}`);
+    }
+
+    // Chunk manager info
+    if (this.chunkManager) {
+      const chunkCount = this.chunkManager.getLoadedChunksCount();
+      console.log(`\n📦 Loaded Chunks: ${chunkCount}`);
+
+      // Access internal chunk data
+      const chunks = (this.chunkManager as any).chunks as Map<string, any>;
+
+      console.log('\n📋 Chunk Details:');
+      let totalBlocks = 0;
+      let totalNonAirBlocks = 0;
+
+      const chunkArray = Array.from(chunks.entries());
+      chunkArray.forEach(([key, chunk], index) => {
+        const nonAirBlocks = Array.from(chunk.data).filter((id: number) => id !== 0).length;
+        totalBlocks += chunk.data.length;
+        totalNonAirBlocks += nonAirBlocks;
+
+        if (index < 10) { // Show first 10 chunks
+          console.log(`   Chunk ${key}:`);
+          console.log(`      Total blocks: ${chunk.data.length}`);
+          console.log(`      Non-air blocks: ${nonAirBlocks} (${(nonAirBlocks / chunk.data.length * 100).toFixed(1)}%)`);
+
+          // Count blocks by type
+          const blockCounts: Map<number, number> = new Map();
+          for (let i = 0; i < chunk.data.length; i++) {
+            const blockId = chunk.data[i];
+            blockCounts.set(blockId, (blockCounts.get(blockId) || 0) + 1);
+          }
+
+          console.log(`      Block types:`);
+          blockCounts.forEach((count, blockId) => {
+            if (blockId !== 0) {
+              const blockName = this.getBlockName(blockId);
+              console.log(`         ${blockName} (ID ${blockId}): ${count} blocks`);
+            }
+          });
+        }
+      });
+
+      if (chunkArray.length > 10) {
+        console.log(`   ... and ${chunkArray.length - 10} more chunks`);
+      }
+
+      console.log(`\n📊 Total Statistics:`);
+      console.log(`   Total blocks: ${totalBlocks}`);
+      console.log(`   Non-air blocks: ${totalNonAirBlocks}`);
+      console.log(`   Air blocks: ${totalBlocks - totalNonAirBlocks}`);
+      console.log(`   Fill ratio: ${(totalNonAirBlocks / totalBlocks * 100).toFixed(1)}%`);
+    }
+
+    // Scene info
+    if (this.scene) {
+      const meshCount = this.scene.meshes.length;
+      const materialCount = this.scene.materials.length;
+      const textureCount = this.scene.textures.length;
+
+      console.log(`\n🎨 Rendering Info:`);
+      console.log(`   Meshes: ${meshCount}`);
+      console.log(`   Materials: ${materialCount}`);
+      console.log(`   Textures: ${textureCount}`);
+
+      // Count triangles
+      let totalTriangles = 0;
+      this.scene.meshes.forEach(mesh => {
+        if (mesh.getTotalVertices && mesh.getIndices) {
+          const indices = mesh.getIndices();
+          if (indices) {
+            totalTriangles += indices.length / 3;
+          }
+        }
+      });
+
+      console.log(`   Total triangles: ${totalTriangles.toLocaleString()}`);
+    }
+
+    // Performance info
+    if (this.engine) {
+      const fps = this.engine.getFps();
+      console.log(`\n⚡ Performance:`);
+      console.log(`   FPS: ${fps.toFixed(1)}`);
+    }
+
+    // Connection info
+    if (this.socket) {
+      const isConnected = this.socket.isConnected();
+      const serverUrl = (this.socket as any).server || 'unknown';
+      console.log(`\n🌐 Connection:`);
+      console.log(`   Status: ${isConnected ? 'Connected' : 'Disconnected'}`);
+      console.log(`   Server: ${serverUrl}`);
+    }
+
+    console.log('\n========================================');
+    console.log('End of debug dump');
+    console.log('========================================\n');
+  }
+
+  /**
+   * Get block name from ID
+   */
+  private getBlockName(blockId: number): string {
+    switch (blockId) {
+      case 0: return 'Air';
+      case 1: return 'Stone';
+      case 2: return 'Dirt';
+      case 3: return 'Grass';
+      default: return `Unknown (${blockId})`;
+    }
   }
 
   /**
