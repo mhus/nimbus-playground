@@ -44,23 +44,20 @@ export class FlatWorldGenerator implements WorldGenerator {
     const size = chunkSize * chunkSize * height;
     const data = new Uint16Array(size);
 
-    // Fill chunk with blocks
+    // Generate flat terrain (only top 2 layers)
     for (let x = 0; x < chunkSize; x++) {
       for (let z = 0; z < chunkSize; z++) {
         for (let y = 0; y < height; y++) {
           const index = x + y * chunkSize + z * chunkSize * height;
 
-          if (y < this.groundLevel - 5) {
-            // Stone layer
-            data[index] = this.stoneBlockID;
-          } else if (y < this.groundLevel - 1) {
-            // Dirt layer
-            data[index] = this.dirtBlockID;
-          } else if (y === this.groundLevel - 1) {
-            // Grass layer
+          if (y === this.groundLevel - 1) {
+            // Top layer: Grass
             data[index] = this.grassBlockID;
+          } else if (y === this.groundLevel - 2) {
+            // Second layer: Dirt
+            data[index] = this.dirtBlockID;
           } else {
-            // Air
+            // Everything else: Air
             data[index] = 0;
           }
         }

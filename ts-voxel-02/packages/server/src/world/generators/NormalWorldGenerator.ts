@@ -85,20 +85,15 @@ export class NormalWorldGenerator implements WorldGenerator {
         for (let y = 0; y < height; y++) {
           const index = x + y * chunkSize + z * chunkSize * height;
 
-          if (y < terrainHeight - 5) {
-            // Stone layer
-            data[index] = this.stoneBlockID;
-          } else if (y < terrainHeight - 1) {
-            // Dirt layer
+          // Only generate top 2 layers for performance/testing
+          if (y === terrainHeight - 1) {
+            // Top layer: Grass
+            data[index] = this.grassBlockID;
+          } else if (y === terrainHeight - 2) {
+            // Second layer: Dirt
             data[index] = this.dirtBlockID;
-          } else if (y === terrainHeight - 1) {
-            // Grass layer (if above water)
-            data[index] = y >= this.waterLevel ? this.grassBlockID : this.dirtBlockID;
-          } else if (y < this.waterLevel) {
-            // Water (placeholder with air for now)
-            data[index] = 0;
           } else {
-            // Air
+            // Everything else: Air
             data[index] = 0;
           }
         }
