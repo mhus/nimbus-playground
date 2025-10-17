@@ -44,7 +44,7 @@ export class ChunkManager {
    * Safari: 3, Chrome: 1
    */
   private getBrowserSpecificRenderDistance(): number {
-    return this.isSafari() ? 3 : 1;
+    return this.isSafari() ? 3 : 2;
   }
 
   /**
@@ -52,7 +52,7 @@ export class ChunkManager {
    * Safari: 4, Chrome: 2
    */
   private getBrowserSpecificUnloadDistance(): number {
-    return this.isSafari() ? 4 : 2;
+    return this.isSafari() ? 4 : 3;
   }
 
   constructor(socket: WebSocketClient, scene: Scene) {

@@ -177,3 +177,8 @@ private renderDistance = 1; // Chunks to load around player
 private unloadDistance = 2; // Chunks further than this will be unloaded
 
 gesetzt werden.
+---
+Im Flugmodus fliegt man nicht mehr in Blickrichtung. Wenn der flugmodus aktiv ist, soll, wie es vorher war, in Blickrichtung geflugen werden.
+---
+> Mit den Keys Q und W soll man sich nach Links und Rechts drehen können. Zusätzlich zur Mausbewegung.
+---

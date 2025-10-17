@@ -181,13 +181,13 @@ export class PlayerController {
   }
 
   /**
-   * Update flight mode (no gravity, free movement)
+   * Update flight mode (no gravity, free movement in look direction)
    */
   private updateFlightMode(deltaTime: number): void {
-    // Get movement input
-    const moveDirection = this.getMovementDirection();
+    // Get movement input with full 3D direction (includes vertical component)
+    const moveDirection = this.getFlightMovementDirection();
 
-    // Add vertical movement
+    // Add additional vertical movement for space/shift
     if (this.moveUp) {
       moveDirection.y += 1;
     }
@@ -213,7 +213,7 @@ export class PlayerController {
   }
 
   /**
-   * Get movement direction from input
+   * Get movement direction from input (walk mode - horizontal only)
    */
   private getMovementDirection(): Vector3 {
     const direction = Vector3.Zero();
@@ -226,6 +226,33 @@ export class PlayerController {
     const right = this.camera.getDirection(Vector3.Right());
     right.y = 0;
     right.normalize();
+
+    // Apply input
+    if (this.moveForward) {
+      direction.addInPlace(forward);
+    }
+    if (this.moveBackward) {
+      direction.subtractInPlace(forward);
+    }
+    if (this.moveLeft) {
+      direction.subtractInPlace(right);
+    }
+    if (this.moveRight) {
+      direction.addInPlace(right);
+    }
+
+    return direction;
+  }
+
+  /**
+   * Get movement direction for flight mode (includes vertical component)
+   */
+  private getFlightMovementDirection(): Vector3 {
+    const direction = Vector3.Zero();
+
+    // Get camera forward and right vectors (with vertical component!)
+    const forward = this.camera.getDirection(Vector3.Forward());
+    const right = this.camera.getDirection(Vector3.Right());
 
     // Apply input
     if (this.moveForward) {
