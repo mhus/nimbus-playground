@@ -103,17 +103,19 @@ export class TextureAtlas {
   async load(): Promise<void> {
     console.log('[TextureAtlas] Creating dynamic texture atlas...');
 
-    // Create canvas for atlas
+    // Create our own canvas for drawing
     this.atlasCanvas = document.createElement('canvas');
     this.atlasCanvas.width = this.maxAtlasSize;
     this.atlasCanvas.height = this.maxAtlasSize;
-    this.atlasContext = this.atlasCanvas.getContext('2d', { willReadFrequently: false })!;
+    this.atlasContext = this.atlasCanvas.getContext('2d', { willReadFrequently: true })!;
 
-    // Fill with white background initially for testing
-    this.atlasContext.fillStyle = '#FFFFFF';
+    console.log('[TextureAtlas] Canvas dimensions:', this.atlasCanvas.width, 'x', this.atlasCanvas.height);
+
+    // Fill with magenta background for debugging (so we can see if texture is applied)
+    this.atlasContext.fillStyle = '#FF00FF';
     this.atlasContext.fillRect(0, 0, this.maxAtlasSize, this.maxAtlasSize);
 
-    // Create dynamic texture with generateMipMaps = false for simplicity
+    // Create dynamic texture from our canvas
     this.atlasTexture = new DynamicTexture('dynamicAtlas', this.maxAtlasSize, this.scene, false);
 
     // Initial update from canvas
@@ -126,6 +128,9 @@ export class TextureAtlas {
     this.material.backFaceCulling = true;
 
     console.log('[TextureAtlas] Dynamic atlas created');
+    console.log('[TextureAtlas] Material:', this.material);
+    console.log('[TextureAtlas] Texture:', this.atlasTexture);
+    console.log('[TextureAtlas] Texture is ready:', this.atlasTexture.isReady());
   }
 
   /**
@@ -134,15 +139,32 @@ export class TextureAtlas {
   private updateAtlasTexture(): void {
     if (!this.atlasTexture || !this.atlasCanvas || !this.atlasContext) return;
 
-    // Get image data from our canvas
-    const imageData = this.atlasContext.getImageData(0, 0, this.maxAtlasSize, this.maxAtlasSize);
-
-    // Get the DynamicTexture's context and update it
+    // Get the DynamicTexture's context
     const textureContext = this.atlasTexture.getContext();
-    textureContext.putImageData(imageData, 0, 0);
 
-    // Tell Babylon.js to update the GPU texture
-    this.atlasTexture.update();
+    console.log('[TextureAtlas] Updating texture - clearing and drawing...');
+
+    // Clear the texture context
+    textureContext.clearRect(0, 0, this.maxAtlasSize, this.maxAtlasSize);
+
+    // Draw our canvas onto the texture's canvas
+    textureContext.drawImage(this.atlasCanvas, 0, 0);
+
+    console.log('[TextureAtlas] Canvas drawn, calling update()...');
+
+    // Tell Babylon.js to update the GPU texture with invertY = false
+    this.atlasTexture.update(false);
+
+    // Force mark the texture as dirty
+    if (this.material) {
+      this.material.markDirty();
+    }
+
+    console.log('[TextureAtlas] Update() called with invertY=false, material marked dirty');
+
+    // Verify by checking a pixel
+    const imageData = textureContext.getImageData(0, 0, 1, 1);
+    console.log('[TextureAtlas] First pixel color:', imageData.data);
   }
 
   /**
@@ -151,6 +173,7 @@ export class TextureAtlas {
   async loadTextureIntoAtlas(texturePath: string): Promise<{ x: number; y: number }> {
     // Check if already loaded
     if (this.textureMap.has(texturePath)) {
+      console.log(`[TextureAtlas] Texture already loaded: ${texturePath}`);
       return this.textureMap.get(texturePath)!;
     }
 
@@ -168,21 +191,35 @@ export class TextureAtlas {
 
     try {
       // Load image
-      const img = await this.loadImage(`${this.config.assetServerUrl}/${texturePath}`);
+      const url = `${this.config.assetServerUrl}/${texturePath}`;
+      console.log(`[TextureAtlas] Loading texture from: ${url}`);
+      const img = await this.loadImage(url);
+      console.log(`[TextureAtlas] Image loaded: ${img.width}x${img.height}`);
 
       // Draw into atlas canvas
       const pixelX = slotX * this.textureSize;
       const pixelY = slotY * this.textureSize;
+      console.log(`[TextureAtlas] Drawing texture at slot (${slotX}, ${slotY}) = pixel (${pixelX}, ${pixelY})`);
+
+      // Draw a test rectangle first to verify canvas works
+      this.atlasContext!.fillStyle = '#00FF00';
+      this.atlasContext!.fillRect(pixelX, pixelY, this.textureSize, this.textureSize);
+      console.log(`[TextureAtlas] Drew green test rectangle at (${pixelX}, ${pixelY})`);
+
+      // Now draw the actual image on top
       this.atlasContext!.drawImage(img, pixelX, pixelY, this.textureSize, this.textureSize);
+      console.log(`[TextureAtlas] Drew image on top`);
 
       // Update dynamic texture from canvas
       this.updateAtlasTexture();
+      console.log(`[TextureAtlas] Texture updated to GPU`);
 
       // Cache position
       const position = { x: slotX, y: slotY };
       this.textureMap.set(texturePath, position);
       this.textureLoaded.add(texturePath);
 
+      console.log(`[TextureAtlas] Successfully loaded texture ${texturePath} at slot (${slotX}, ${slotY})`);
       return position;
     } catch (error) {
       console.error(`[TextureAtlas] Failed to load texture ${texturePath}:`, error);

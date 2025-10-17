@@ -256,6 +256,12 @@ export class MainMenu {
       this.mainContainer.dispose();
       this.mainContainer = undefined;
     }
+
+    // Remove test cube
+    if (this.testCube) {
+      this.testCube.dispose();
+      this.testCube = undefined;
+    }
   }
 
   /**

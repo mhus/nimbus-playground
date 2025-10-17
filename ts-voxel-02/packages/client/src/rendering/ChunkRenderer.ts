@@ -72,8 +72,23 @@ export class ChunkRenderer {
             continue;
           }
 
+          // TEMPORARY: Force all blocks to use grass texture for testing
+          const grassUV = await this.atlas.getTextureUV('grass');
+          const blockUVs: BlockFaceUVs = {
+            top: grassUV,
+            bottom: grassUV,
+            sides: grassUV,
+          };
+
+          // Debug: Log UV coordinates for first block
+          if (x === 0 && y === 63 && z === 0) {
+            console.log('[ChunkRenderer] Test block UV coordinates:', grassUV);
+            console.log('[ChunkRenderer] Atlas material:', this.atlas.getMaterial());
+            console.log('[ChunkRenderer] Atlas texture:', this.atlas.getTexture());
+          }
+
           // Get UV mapping for this block (loads texture into atlas if needed)
-          const blockUVs = await this.atlas.getBlockUVs(block);
+          // const blockUVs = await this.atlas.getBlockUVs(block);
 
           // Get metadata if available
           const packedMetadata = chunk.metadata?.[index] || 0;
@@ -113,6 +128,14 @@ export class ChunkRenderer {
     const material = this.atlas.getMaterial();
     if (material) {
       mesh.material = material;
+      console.log(`[ChunkRenderer] Applied material to chunk ${chunk.chunkX},${chunk.chunkZ}`);
+      console.log(`[ChunkRenderer] Material:`, material);
+      console.log(`[ChunkRenderer] Material diffuseTexture:`, material.diffuseTexture);
+      console.log(`[ChunkRenderer] Mesh has ${positions.length / 3} vertices, ${indices.length / 3} triangles`);
+      console.log(`[ChunkRenderer] UVs count:`, uvs.length);
+      console.log(`[ChunkRenderer] First 20 UVs:`, uvs.slice(0, 20));
+    } else {
+      console.error(`[ChunkRenderer] No material available for chunk ${chunk.chunkX},${chunk.chunkZ}!`);
     }
 
     console.log(`[ChunkRenderer] Created chunk ${chunk.chunkX},${chunk.chunkZ} with ${vertexIndex / 24} blocks`);
