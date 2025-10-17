@@ -1,0 +1,414 @@
+syntax = "proto3";
+
+/* 
+ * LoginRequest is send to player after connection.
+*/
+
+message LoginRequest {
+	string name = 1;   // Server's name
+	uint32 protocol = 2;
+	uint32 online_players = 3;
+	uint32 max_players = 4;
+	string motd = 5;
+	string software = 6;
+	bool auth = 7;
+	string secret = 8;
+}
+
+
+/* 
+ * LoginStatus changes text while logging in.
+*/
+
+message LoginStatus {
+	string message = 1;
+	uint64 time = 2;
+}
+
+/* 
+ * LoginSuccess is send after successful login.
+ * x/y/z_pos corresponds player's position
+ * items/blocksare stringified copies of servers block/item registry
+ * inventory is stringified copy of player's inventory object
+*/
+
+message LoginSuccess {
+	double x_pos = 1;
+	double y_pos = 2;
+	double z_pos = 3;
+	string items_def = 4;
+	string blocks_def = 5;
+	string inventory = 6;
+	string armor = 7;
+	string movement = 8;
+}
+
+/* 
+ * Client ping message.
+*/
+
+message Ping {
+	uint64 time = 1;
+}
+
+
+/* 
+ * PlayerKick is used to set reason of connection close
+*/
+
+message PlayerKick {
+	string reason = 1;
+	uint64 time = 2;
+}
+
+/* 
+ * PlayerEntity is send to make client ignore actions of player's entity
+ * Also sets player's model and texture
+*/
+
+message PlayerEntity {
+	string uuid = 1;
+	string model = 2;
+	string texture = 3;
+}
+
+/* 
+ * PlayerTeleport should be send after teleportation.
+ * x, y and z corresponds player's new position
+*/
+
+message PlayerTeleport {
+	double x = 1;
+	double y = 2;
+	double z = 3;
+}
+
+/* 
+ * PlayerInventory updates entire inventory of player.
+ * inventory contains stringified copy of player's inventory object
+*/
+
+message PlayerInventory {
+	string type = 1;
+	string inventory = 2;
+}
+
+/* 
+ * PlayerSlotUpdate updates specific slot of inventory.
+ * data is an stringified copy of item.
+*/
+
+message PlayerSlotUpdate {
+	uint32 slot = 1;
+	string type = 2;
+	string data = 3;
+}
+
+/* 
+ * PlayerImpulse pushes player.
+*/
+
+message PlayerApplyImpulse {
+	float x = 1;
+	float y = 2;
+	float z = 3;
+}
+
+/* 
+ * PlayerUpdateMovement updates player's movement (noa) values.
+*/
+
+message PlayerUpdateMovement {
+	string key = 1;
+	double value = 2;
+}
+
+/* 
+ * PlayerUpdatePhysics updates player's physic (noa) values.
+*/
+
+message PlayerUpdatePhysics {
+	string key = 1;
+	double value = 2;
+}
+
+/* 
+ * PlayerHealth updates number of hearts of player.
+*/
+
+message PlayerHealth {
+	sint32 value = 1;
+	sint32 max = 2;
+}
+
+/* 
+ * PlayerSetBlockReach sets maximum distance client can click blocks
+*/
+
+message PlayerSetBlockReach {
+	float value = 1;
+}
+
+/* 
+ * PlayerOpenInventory opens inventory to player. If type is MAIN, data and name is ignored.
+*/
+
+message PlayerOpenInventory {
+	enum Type {
+		MAIN = 0;
+		CHEST = 1;
+		CRAFTING = 2;
+		FURNACE = 3;
+	}
+
+	Type type = 1;
+	string name = 2;
+	string data = 3;
+}
+
+/* 
+ * SoundPlay plays sound for player
+ * sound is sounds location, volume is volume (max 100)
+ * x, y, z are used for setting location of this sound
+*/
+
+message SoundPlay {
+	string sound = 1;
+	uint32 volume = 2;
+	double x = 3;
+	double y = 4;
+	double z = 5;
+}
+
+/* 
+ * ChatMessege adds new message on player's chat
+*/
+
+message ChatMessage {
+	message ChatComponent {
+		string text = 1;
+		string font = 2;
+		string color = 3;
+		bool linethrough = 4;
+		bool underline = 5;
+	}
+
+	map<uint32, ChatComponent> message = 1;
+	uint64 time = 2;
+}
+
+message UpdateTextBoard {
+	enum Type {
+		TAB = 0;
+		SIDE = 1;
+		CENTER = 2;
+		HOTBAR = 3;
+	}
+
+	message ChatComponent {
+		string text = 1;
+		string font = 2;
+		string color = 3;
+		bool linethrough = 4;
+		bool underline = 5;
+	}
+
+	Type type = 1;
+	map<uint32, ChatComponent> message = 2;
+	uint64 time = 3;
+}
+
+/* 
+ * EntityCreate creates new entity.
+ * uuid is entity's id, data is stringifid version of entity's object
+*/
+
+message EntityCreate {
+	string uuid = 1;
+	string data = 2;
+}
+
+/* 
+ * entityRemove removes entity
+*/
+
+message EntityRemove {
+	string uuid = 1;
+}
+
+/* 
+ * entityMove moves and rotates entity
+*/
+
+message EntityMove {
+	string uuid = 1;
+	double x = 2;
+	double y = 3;
+	double z = 4;
+	float rotation = 5;
+	float pitch = 6;
+}
+
+/* 
+ * Updates entity's name/nametag visibility
+*/
+
+message EntityNameUpdate {
+	string uuid = 1;
+	string name = 2;
+	bool visible = 3;
+}
+
+
+/* 
+ * Changes item held by entity.
+*/
+
+message EntityHeldItem {
+	string uuid = 1;
+	string id = 2;
+}
+
+
+/* 
+ * Changes entity's armor
+*/
+
+message EntityArmor {
+	string uuid = 1;
+	int32 type = 2;
+	string id = 3;
+}
+
+/* 
+ * entityAnimate plays entity's animation.
+*/
+
+message EntityAnimate {
+	string uuid = 1;
+	string animation = 2;
+	uint32 time = 3;
+	bool replace = 4;
+}
+
+/* 
+ * worldBlockUpdate changes block at x, y, z to block with id id
+*/
+
+message WorldBlockUpdate {
+	sint32 x = 1;
+	sint32 y = 2;
+	sint32 z = 3;
+	uint32 id = 4;
+	bool particles = 5;
+}
+
+/* 
+ * WorldBlockUpdate in one message
+*/
+
+message WorldMultiBlockUpdate {
+	map<int32, WorldBlockUpdate> blocks = 1;
+}
+
+/* 
+ * WorldChunkLoad updates chunk for player. x, y and z changes chunk's location. 
+ * type changes, how chunks are used. If true, chunks are 32x256x32 and y is ignored.
+ * Else (type = false), chunks are 32x32x32.
+ * Data is LittleEndian buffer with all blocks. Compressed bool is set to true, if data is compressed with zlib.
+*/
+
+message WorldChunkLoad {
+	sint32 x = 1;
+	sint32 y = 2;
+	sint32 z = 3;
+	bytes data = 4;
+	sint32 height = 5;
+	bool compressed = 6;
+}
+
+/* 
+ * WorldChunkUnload updates chunk for player. x, y and z changes chunk's location. 
+ * type changes, how chunks are used. If true, chunks are 32x256x32 and y is ignored.
+ * Else (type = false), chunks are 32x32x32.
+ * Data is buffer with all blocks. Compressed bool is set to true, if data is compressed with zlib.
+*/
+
+message WorldChunkUnload {
+	sint32 x = 1;
+	sint32 y = 2;
+	sint32 z = 3;
+	sint32 height = 4;
+}
+
+/* 
+ * WorldChunkIsLoaded can be send to check if selected chunk is loaded in client
+*/
+
+message WorldChunkIsLoaded {
+	sint32 x = 1;
+	sint32 y = 2;
+	sint32 z = 3;
+}
+
+/* 
+ * WorldChunksRemoveAll removes/unloads all chunks.
+*/
+
+message WorldChunksRemoveAll {
+	bool confirm = 1;
+}
+
+
+/* 
+ * RegistryUpdate updates client-side registry
+ * Warning! It can create bugs!
+*/
+
+message RegistryUpdate {
+	string items_def = 1;
+	string blocks_def = 2;
+}
+
+
+/*
+ * Updates settings of fog
+*/
+
+message EnvironmentFogUpdate {
+	uint32 mode = 1;
+	float density = 2;
+	float start = 3;
+	float end = 4;
+	float color_red = 5;
+	float color_green = 6;
+	float color_blue = 7;
+}
+
+/*
+ * Updates clear color
+*/
+
+message EnvironmentSkyUpdate {
+	bool clouds = 1;
+	float color_red = 2;
+	float color_green = 3;
+	float color_blue = 4;
+
+	float color_red_top = 5;
+	float color_green_top = 6;
+	float color_blue_top = 7;
+}
+
+
+/*
+ * Message for custom/plugin data
+ * It isn't used by server or client by default
+*/
+
+
+message PluginMessage {
+	string key = 1;
+	uint32 version = 2;
+	bytes value = 3;
+}

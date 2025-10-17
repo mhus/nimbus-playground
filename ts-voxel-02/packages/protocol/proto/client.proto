@@ -1,0 +1,216 @@
+syntax = "proto3";
+
+
+/* 
+ * Client response to server's loginRequest messege.
+*/
+
+message LoginResponse {
+	string username = 1;
+	uint32 protocol = 2;
+	bool mobile = 3; // Is set to true, if player is using mobile device
+	string client = 4;
+	string uuid = 5;
+	string secret = 6;
+}
+
+/* 
+ * Client ping message.
+*/
+
+message Ping {
+	uint64 time = 1;
+}
+
+/* 
+ * ActionMove is send, when player moves.
+ * Field x, y and z corresponds for player's position in world
+*/
+
+message ActionMove {
+	double x = 1;
+	double y = 2;
+	double z = 3;
+}
+
+/* 
+ * ActionLook is send, when player rotates.
+ * rotation is just player's camera rotation
+*/
+
+message ActionLook {
+	float rotation = 1;
+	float pitch = 2;
+}
+
+/* 
+ * ActionMoveLook is send, when player moves and rotates.
+ * Field x, y and z corresponds for player's position in world
+ * rotation is just player's camera rotation
+*/
+
+message ActionMoveLook {
+	double x = 1;
+	double y = 2;
+	double z = 3;
+	float rotation = 4;
+	float pitch = 5;
+}
+
+/* 
+ * ActionMessage is used for sending chat messages and commands.
+*/
+
+message ActionMessage {
+	string message = 1;
+}
+
+/* 
+ * ActionBlockPlace is send after player tries to place a block
+ * x, y and z are coordinates of placed block
+ * x2, y2 and z2 is position block targeted by player
+*/
+
+message ActionBlockPlace {
+	sint32 x = 1;
+	sint32 y = 2;
+	sint32 z = 3;
+	sint32 x2 = 4;
+	sint32 y2 = 5;
+	sint32 z2 = 6;
+}
+
+/* 
+ * ActionBlockBreak is send after player tries to break a block
+ * x, y and z are coordinates of targeted block
+ * finished is set to true, when blockbreak is finished
+*/
+
+message ActionBlockBreak {
+	sint32 x = 1;
+	sint32 y = 2;
+	sint32 z = 3;
+	bool finished = 4;
+}
+
+/* 
+ * ActionInventoryClick is send after every inventory click and change of selected hotbar slot
+ * slot is an slot number. It can be negative for non-standart slots
+ * type is a type of click/action.
+*/
+
+message ActionInventoryClick {
+	enum Type {
+		LEFT = 0;
+		RIGHT = 1;
+		MIDDLE = 2;
+		SELECT = 3;
+	}
+
+	enum TypeInv {
+		MAIN = 0;
+		ARMOR = 1;
+		CRAFTING = 2;
+		HOOK = 3;
+	}
+
+	sint32 slot = 1;
+	Type type = 2;
+	TypeInv inventory = 3;
+}
+
+/* 
+ * ActionInventoryPick is send after block pick.
+*/
+
+message ActionInventoryPick {
+	sint32 slot = 1;
+	sint32 slot2 = 2;
+	sint32 block = 3;
+}
+
+/* 
+ * ActionInventoryOpen is send after opening any inventory/menu
+ * It can be used to determine, if player should be able to do other actions.
+*/
+
+message ActionInventoryOpen {
+	enum Type {
+		MAIN = 0;
+		CHEST = 1;
+		CRAFTING = 2;
+		FURNACE = 3;
+	}
+
+	Type inventory = 1;
+}
+
+/* 
+ * ActionInventoryClose is send after closing active inventory/gui
+*/
+
+message ActionInventoryClose {
+	enum Type {
+		MAIN = 0;
+		CHEST = 1;
+		CRAFTING = 2;
+		FURNACE = 3;
+	}
+
+	Type inventory = 1;
+}
+
+/* 
+ * ActionClick is send after clicking a block
+*/
+
+message ActionClick {
+	sint32 x = 1;
+	sint32 y = 2;
+	sint32 z = 3;
+	string type = 4;
+	bool on_block = 5;
+}
+
+/* 
+ * ActionClickEntity is send after clicking an entity
+*/
+
+message ActionClickEntity {
+	string uuid = 1;
+	string type = 2;
+	float distance = 3;
+}
+
+/* 
+ * ActionKeyPress is send after pressing movement keys
+*/
+
+message ActionKeyPress {
+	string key = 1;
+	bool type = 2;
+}
+
+/* 
+ * WorldChunkIsLoadedResponce is send as answer to WorldChunkIsLoaded
+*/
+
+message WorldChunkIsLoadedResponce {
+	sint32 x = 1;
+	sint32 y = 2;
+	sint32 z = 3;
+	bool loaded = 4;
+}
+
+
+/*
+ * Message for custom/plugin data
+ * It isn't used by server or client by default
+*/
+
+
+message PluginMessage {
+	string key = 1;
+	uint32 version = 2;
+	bytes value = 3;
+}
