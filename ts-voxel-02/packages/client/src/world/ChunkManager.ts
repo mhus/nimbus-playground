@@ -24,17 +24,45 @@ export class ChunkManager {
   private renderer: ChunkRenderer;
   private chunkSize = 32;
 
-  // Dynamic loading settings
-  private renderDistance = 3; // Chunks to load around player
-  private unloadDistance = 5; // Chunks further than this will be unloaded
+  // Dynamic loading settings - browser-specific values
+  private renderDistance = this.getBrowserSpecificRenderDistance();
+  private unloadDistance = this.getBrowserSpecificUnloadDistance();
   private lastPlayerChunk: { x: number, z: number } = { x: 0, z: 0 };
   private updateInterval = 1000; // Check for new chunks every 1 second
   private lastUpdateTime = 0;
+
+  /**
+   * Detect if browser is Safari
+   */
+  private isSafari(): boolean {
+    const ua = navigator.userAgent.toLowerCase();
+    return ua.includes('safari') && !ua.includes('chrome') && !ua.includes('chromium');
+  }
+
+  /**
+   * Get browser-specific render distance
+   * Safari: 3, Chrome: 1
+   */
+  private getBrowserSpecificRenderDistance(): number {
+    return this.isSafari() ? 3 : 1;
+  }
+
+  /**
+   * Get browser-specific unload distance
+   * Safari: 4, Chrome: 2
+   */
+  private getBrowserSpecificUnloadDistance(): number {
+    return this.isSafari() ? 4 : 2;
+  }
 
   constructor(socket: WebSocketClient, scene: Scene) {
     this.socket = socket;
     this.scene = scene;
     this.renderer = new ChunkRenderer(scene);
+
+    // Log browser-specific settings
+    console.log(`[ChunkManager] Browser detected: ${this.isSafari() ? 'Safari' : 'Chrome/Other'}`);
+    console.log(`[ChunkManager] Render distance: ${this.renderDistance}, Unload distance: ${this.unloadDistance}`);
 
     // Listen for chunk data from server
     this.socket.on('chunk_data', (data) => {

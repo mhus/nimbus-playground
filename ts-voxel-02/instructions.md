@@ -163,5 +163,17 @@ Mit der F Taste kann man zwischen flight und walk mode wechseln. Im Flight mode 
 ---
 Um die Welt, Voxels und Texturen zu debuggen moechte ich, wenn ich wenn ich die Teste '\' druecke einen dump der Welt auf console ausgeben haben.
 ---
-Nachladen von Welt-Dateien-Chunks:
-Es wird nicht immer alles geladen, sondern maximal 250 
+Nachladen von Welt-Dateien-Chunks: Es wird nicht immer alles geladen und angezeigt, da welten wesentlich größer als jetzt sein können. Deshalb macht es sinn chunks im hintergrund nachzuladen wenn man
+sich bewegt.
+---
+Die selektierten zeilen sollen im Safari auf
+
+private renderDistance = 3; // Chunks to load around player
+private unloadDistance = 4; // Chunks further than this will be unloaded
+
+und im google chrome auf
+
+private renderDistance = 1; // Chunks to load around player
+private unloadDistance = 2; // Chunks further than this will be unloaded
+
+gesetzt werden.
