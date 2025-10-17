@@ -18,22 +18,30 @@ ts-voxel-02/
 
 ## Status
 
-### ✅ Abgeschlossen
-- Projekt-Analyse der alten Codebases
-- Dependencies-Analyse und Upgrade-Plan
-- Monorepo-Struktur mit Workspaces
-- **Core Package**: Types, Helpers, Models (Entity, World, Inventory)
-- **Protocol Package**: Proto-Dateien kopiert, Handler-Basis erstellt
+### ✅ Phase 1 & 2 Abgeschlossen (2025-10-17)
 
-### 🚧 In Arbeit
-- Protobuf Code-Generierung
-- Controller und Manager Migration
+- **Projekt-Analyse**: Alte Codebases vollständig analysiert
+- **Monorepo-Struktur**: 4 Packages (core, protocol, server, client)
+- **Core Package**: Vollständig implementiert (Types, Helpers, Models)
+- **Protocol Package**: Proto-Dateien migriert, Handler-Basis fertig
+- **Server Package**: ✅ Basis-Implementation komplett
+  - Registry-System (Blocks, Items, Commands)
+  - World-Manager mit Chunk-System
+  - World-Generatoren (Flat, Normal/Terrain)
+  - Entity-Manager
+  - WebSocket-Server (Basis)
+- **Assets**: ✅ 1896 Dateien kopiert (Texturen, Audio, Fonts, Models)
+- **Client Package**: ✅ Basis-Struktur mit Babylon.js
 
-### 📋 Geplant
-- Server-Package Implementation
-- Client-Package Implementation
-- Assets-Migration (Texturen, Audio, Models)
-- Testing und Integration
+### 📋 Optional: Weitere Ausbaustufen
+- Protobuf-Integration (aktuell JSON)
+- Player-Management & Inventar
+- Chat & Permissions
+- Chunk-Rendering im Client
+- GUI-System (Menu, HUD, Inventory)
+- Multiplayer-Testing & Optimierung
+
+Siehe [STATUS.md](./STATUS.md) für detaillierten Fortschritt!
 
 ## Installation
 
