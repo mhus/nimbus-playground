@@ -202,4 +202,96 @@ Auch die Generatoren sollen die Typen geim generieren nutzen.
 ---
 Wenn du auch die assets, also texturen, modelle, sounds durch den server ausliefern kannst, verschiebe diese dateien vom 
 client in den server und passe server und client an.
+
+```text
+
+
+  Block Metadata System Implementation Complete
+
+  1. Core Metadata Types (packages/core/src/models/BlockMetadata.ts)
+
+  - BlockFacing enum (NORTH, EAST, SOUTH, WEST, UP, DOWN)
+  - RotationAxis enum (NONE, X, Y, Z)
+  - BlockState flags (OPEN, POWERED, LIT, TRIGGERED, etc.)
+  - BlockMetadata interface with 16-bit packed structure
+  - Pack/unpack functions for efficient storage
+
+  2. Chunk Data Structure (packages/core/src/models/ChunkData.ts)
+
+  - Shared ChunkData interface with optional metadata array
+  - Helper functions: getBlockIndex(), setBlock(), getBlock()
+  - Support for both block IDs and metadata storage
+
+  3. Protocol Messages (packages/protocol/src/messages/ChunkMessages.ts)
+
+  - ChunkDataMessage - includes optional metadata array
+  - ChunkUpdateMessage - supports single block updates with metadata
+  - Helper functions for creating messages
+
+  4. Rendering Support (packages/client/src/rendering/ChunkRenderer.ts)
+
+  - Extracts metadata from chunk data
+  - Applies rotation matrices based on metadata
+  - Rotates vertices and normals for directional blocks
+  - Support for X, Y, and Z axis rotations
+
+  5. Helper Functions (BlockMetadata.ts:259-380)
+
+  - getOppositeFacing() - get opposite direction
+  - createMetadataFromPlayerPlacement() - block faces player
+  - createMetadataFromPlayerDirection() - block faces player's look direction
+  - metadataEquals(), cloneMetadata(), mergeMetadata()
+  - isDefaultMetadata() - check if metadata is default
+  - createMetadataWithStates() - create with multiple state flags
+
+  Key Features:
+
+  - Memory Efficient: 16-bit packed metadata per block
+  - Flexible Rotation: Support for X, Y, Z axis rotations in 45° increments
+  - State Flags: 8 bits for various block states (powered, lit, open, etc.)
+  - Network Optimized: Optional metadata transmission (only when needed)
+  - Backward Compatible: Metadata is optional, defaults work without it
+
+  The system is now ready for use! Blocks can have rotations and states that are:
+  - Stored efficiently in chunks
+  - Transmitted through protocol messages
+  - Rendered correctly with rotation transforms
+  - Manipulated with helper functions
+
+---
+
+  ✅ Asset-Delivery-System vollständig implementiert und gebaut!
+
+  Behobene Probleme:
+
+  1. Export-Konflikte: Doppelte Typdefinitionen (BlockType, ItemType, ChunkData, EntityType) in World.ts und Entity.ts entfernt
+  2. ChunkData-Struktur: Von {id: XZ} zu {chunkX, chunkZ} aktualisiert
+  3. BlockDefinition: Shape-Property hinzugefügt, Tool-Type korrigiert
+  4. Item IDs: Von string zu number konvertiert
+  5. Type-Safety: Buffer-Handling für Uint16Array vs number[] Kompatibilität
+  6. Null-Safety: World loading null/undefined Probleme behoben
+
+  Erfolgreich gebaut:
+
+  - ✅ @voxel-02/core
+  - ✅ @voxel-02/protocol
+  - ✅ @voxel-02/server
+  - ✅ @voxel-02/client
+
+  System-Architektur:
+
+  Server (Port 3000)
+  ├── WebSocket Server (Port 3000) - Game logic, chunks, registry
+  └── HTTP Asset Server (Port 3001) - Assets (textures, models, audio)
+      ├── GET /manifest - Asset manifest
+      ├── GET /assets/{path} - Asset files
+      └── GET /health - Health check
+
+  Client
+  ├── WebSocket Client - Receives manifest & registry
+  ├── ClientAssetManager - Manages asset loading & caching
+  └── TextureAtlas - Loads atlas from server URL
+
+  Das System ist bereit zum Testen! Der Server wird Assets dynamisch ausliefern und der Client lädt sie bei Bedarf.
+```
 ---

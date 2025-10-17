@@ -189,18 +189,14 @@ export class VoxelClient {
 
         // Load texture atlas from server
         if (this.atlas) {
-          const atlasUrl = this.assetManager.getAssetUrl('textures/atlas');
-          if (atlasUrl) {
-            // Update atlas config with server URL
-            const config = this.atlas.getConfig();
-            config.texturePath = atlasUrl;
-
-            console.log(`[Client] Loading texture atlas from server: ${atlasUrl}`);
+          // For now, use local atlas until server atlas is generated
+          // TODO: Generate atlas on server or load individual textures
+          console.log('[Client] Loading local texture atlas (server atlas not yet generated)');
+          try {
             await this.atlas.load();
-            console.log('[Client] Texture atlas loaded from server');
-          } else {
-            console.warn('[Client] Atlas texture not found in manifest, using local fallback');
-            await this.atlas.load();
+            console.log('[Client] Texture atlas loaded');
+          } catch (error) {
+            console.error('[Client] Failed to load texture atlas:', error);
           }
         }
       }
