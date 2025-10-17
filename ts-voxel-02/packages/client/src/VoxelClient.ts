@@ -130,6 +130,45 @@ export class VoxelClient {
     this.camera!.angularSensibility = 2000;
 
     this.connected = true;
+
+    // Setup pointer lock on canvas click (must be after connection is established)
+    this.setupPointerLock();
+  }
+
+  /**
+   * Setup pointer lock for mouse control
+   */
+  private setupPointerLock(): void {
+    if (!this.canvas || !this.scene) return;
+
+    // Request pointer lock on canvas click
+    const clickHandler = () => {
+      if (!document.pointerLockElement) {
+        this.canvas.requestPointerLock()
+          .catch((err) => {
+            console.warn('[Client] Pointer lock request failed:', err.message);
+          });
+      }
+    };
+
+    this.canvas.addEventListener('click', clickHandler);
+
+    // Handle pointer lock change
+    const lockChangeHandler = () => {
+      const isLocked = document.pointerLockElement === this.canvas;
+      console.log(`[Client] Pointer lock: ${isLocked ? 'enabled' : 'disabled'}`);
+    };
+
+    document.addEventListener('pointerlockchange', lockChangeHandler);
+
+    // ESC key to exit pointer lock
+    const keyHandler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+    };
+
+    document.addEventListener('keydown', keyHandler);
   }
 
   /**
@@ -147,6 +186,12 @@ export class VoxelClient {
     }
 
     this.connected = false;
+
+    // Exit pointer lock
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+
     this.showMainMenu();
   }
 

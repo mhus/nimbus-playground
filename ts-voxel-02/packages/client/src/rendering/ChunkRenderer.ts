@@ -18,43 +18,55 @@ import type { ChunkData } from '../world/ChunkManager';
 export class ChunkRenderer {
   private scene: Scene;
   private chunkSize = 32;
-  private material?: StandardMaterial;
+  private materials: Map<number, StandardMaterial> = new Map();
 
   constructor(scene: Scene) {
     this.scene = scene;
-    this.createMaterial();
+    this.createMaterials();
   }
 
   /**
-   * Create material for chunks
+   * Create materials for different block types
    */
-  private createMaterial(): void {
-    this.material = new StandardMaterial('chunkMaterial', this.scene);
+  private createMaterials(): void {
+    // Block ID 1: Stone
+    const stoneMat = new StandardMaterial('stoneMaterial', this.scene);
+    stoneMat.diffuseTexture = new Texture('/textures/block/stone.png', this.scene);
+    stoneMat.specularColor = new Color3(0, 0, 0); // No specular
+    this.materials.set(1, stoneMat);
 
-    // Try to load stone texture, fallback to color
-    try {
-      const texture = new Texture('/textures/stone.png', this.scene);
-      this.material.diffuseTexture = texture;
-    } catch (error) {
-      console.warn('[ChunkRenderer] Failed to load texture, using color');
-      this.material.diffuseColor = new Color3(0.5, 0.5, 0.5);
-    }
+    // Block ID 2: Dirt
+    const dirtMat = new StandardMaterial('dirtMaterial', this.scene);
+    dirtMat.diffuseTexture = new Texture('/textures/block/dirt.png', this.scene);
+    dirtMat.specularColor = new Color3(0, 0, 0);
+    this.materials.set(2, dirtMat);
+
+    // Block ID 3: Grass (for now, just use grass texture on all sides)
+    const grassMat = new StandardMaterial('grassMaterial', this.scene);
+    grassMat.diffuseTexture = new Texture('/textures/block/grass.png', this.scene);
+    grassMat.specularColor = new Color3(0, 0, 0);
+    this.materials.set(3, grassMat);
+
+    console.log('[ChunkRenderer] Created materials for 3 block types');
+  }
+
+  /**
+   * Get material for block ID
+   */
+  private getMaterial(blockId: number): StandardMaterial | undefined {
+    return this.materials.get(blockId);
   }
 
   /**
    * Create mesh from chunk data (simple voxel rendering)
    */
   createChunkMesh(chunk: ChunkData): Mesh {
-    const positions: number[] = [];
-    const indices: number[] = [];
-    const normals: number[] = [];
-    const uvs: number[] = [];
-
-    let vertexIndex = 0;
     const data = chunk.data;
     const height = chunk.height || 256;
 
-    // Simple rendering: one cube per non-air block
+    // Group blocks by type
+    const blocksByType: Map<number, Array<{x: number, y: number, z: number}>> = new Map();
+
     // Index formula must match server: x + y * chunkSize + z * chunkSize * height
     for (let x = 0; x < this.chunkSize; x++) {
       for (let z = 0; z < this.chunkSize; z++) {
@@ -65,39 +77,64 @@ export class ChunkRenderer {
           // Skip air blocks (id 0)
           if (blockId === 0) continue;
 
-          // World position
-          const wx = chunk.chunkX * this.chunkSize + x;
-          const wy = y;
-          const wz = chunk.chunkZ * this.chunkSize + z;
+          if (!blocksByType.has(blockId)) {
+            blocksByType.set(blockId, []);
+          }
 
-          // Add cube at this position
-          this.addCubeFaces(
-            wx, wy, wz,
-            positions, indices, normals, uvs,
-            vertexIndex
-          );
-
-          vertexIndex += 24; // 4 vertices per face * 6 faces
+          blocksByType.get(blockId)!.push({x, y, z});
         }
       }
     }
 
-    // Create mesh
-    const mesh = new Mesh(`chunk_${chunk.chunkX}_${chunk.chunkZ}`, this.scene);
+    // Create parent mesh
+    const parentMesh = new Mesh(`chunk_${chunk.chunkX}_${chunk.chunkZ}`, this.scene);
 
-    const vertexData = new VertexData();
-    vertexData.positions = positions;
-    vertexData.indices = indices;
-    vertexData.normals = normals;
-    vertexData.uvs = uvs;
+    // Create sub-mesh for each block type
+    for (const [blockId, blocks] of blocksByType.entries()) {
+      const positions: number[] = [];
+      const indices: number[] = [];
+      const normals: number[] = [];
+      const uvs: number[] = [];
+      let vertexIndex = 0;
 
-    vertexData.applyToMesh(mesh);
+      for (const block of blocks) {
+        // World position
+        const wx = chunk.chunkX * this.chunkSize + block.x;
+        const wy = block.y;
+        const wz = chunk.chunkZ * this.chunkSize + block.z;
 
-    if (this.material) {
-      mesh.material = this.material;
+        // Add cube at this position
+        this.addCubeFaces(
+          wx, wy, wz,
+          positions, indices, normals, uvs,
+          vertexIndex
+        );
+
+        vertexIndex += 24; // 4 vertices per face * 6 faces
+      }
+
+      // Create sub-mesh for this block type
+      const subMesh = new Mesh(`chunk_${chunk.chunkX}_${chunk.chunkZ}_block${blockId}`, this.scene);
+      subMesh.parent = parentMesh;
+
+      const vertexData = new VertexData();
+      vertexData.positions = positions;
+      vertexData.indices = indices;
+      vertexData.normals = normals;
+      vertexData.uvs = uvs;
+
+      vertexData.applyToMesh(subMesh);
+
+      // Apply material for this block type
+      const material = this.getMaterial(blockId);
+      if (material) {
+        subMesh.material = material;
+      }
     }
 
-    return mesh;
+    console.log(`[ChunkRenderer] Created chunk ${chunk.chunkX},${chunk.chunkZ} with ${blocksByType.size} block types`);
+
+    return parentMesh;
   }
 
   /**
