@@ -191,6 +191,14 @@ in das package `@voxel-02/core` als EntryTypen. Uebernehem fehlende Attribute au
 Fuege die Daten sinnvoll hinzu damit server und client die Typen benutzen koennen und das das system flexibel bleibt.
 Pruefe die Option, das der Server die Blocktypen/EntityTypen dynamisch ausliefern kann, anstelle von statischen Konfigurationen im Client.
 Auch die Generatoren sollen die Typen geim generieren nutzen.
+
+```text
+ Für weitere Verbesserungen könnten Sie:
+  - Texture-Atlas-System für Block-Rendering
+  - Block-Metadata-System für Rotationen/Zustände
+  - Client-seitiges Caching der Registry
+  - Kompressionfür Registry-Sync (Protobuf/MessagePack)
+```
 ---
 > Wenn du auch die assets, also texturen, modelle, sounds durch den server ausliefern kannst, verschiebe diese dateien vom 
 client in den server und passe server und client an.

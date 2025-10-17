@@ -5,6 +5,8 @@
 import type { WebSocketClient } from '../network/WebSocketClient';
 import type { Scene } from '@babylonjs/core';
 import { ChunkRenderer } from '../rendering/ChunkRenderer';
+import type { TextureAtlas } from '../rendering/TextureAtlas';
+import type { ClientRegistry } from '../registry/ClientRegistry';
 
 export interface ChunkData {
   chunkX: number;
@@ -55,10 +57,10 @@ export class ChunkManager {
     return this.isSafari() ? 4 : 3;
   }
 
-  constructor(socket: WebSocketClient, scene: Scene) {
+  constructor(socket: WebSocketClient, scene: Scene, atlas: TextureAtlas, registry: ClientRegistry) {
     this.socket = socket;
     this.scene = scene;
-    this.renderer = new ChunkRenderer(scene);
+    this.renderer = new ChunkRenderer(scene, atlas, registry);
 
     // Log browser-specific settings
     console.log(`[ChunkManager] Browser detected: ${this.isSafari() ? 'Safari' : 'Chrome/Other'}`);

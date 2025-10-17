@@ -8,6 +8,8 @@ import { WebSocketClient } from './network/WebSocketClient';
 import { ChunkManager } from './world/ChunkManager';
 import { PlayerController } from './player/PlayerController';
 import { ClientRegistry } from './registry/ClientRegistry';
+import { TextureAtlas } from './rendering/TextureAtlas';
+import { createDefaultAtlasConfig } from './rendering/defaultAtlasConfig';
 import { RegistryMessageType, createRegistryAckMessage } from '@voxel-02/protocol';
 import type { RegistryMessage } from '@voxel-02/protocol';
 
@@ -24,6 +26,7 @@ export class VoxelClient {
   private chunkManager?: ChunkManager;
   private playerController?: PlayerController;
   private registry: ClientRegistry;
+  private atlas?: TextureAtlas;
   private connected = false;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -54,6 +57,12 @@ export class VoxelClient {
     // Create light
     const light = new HemisphericLight('light', new Vector3(0, 1, 0), this.scene);
     light.intensity = 0.7;
+
+    // Initialize texture atlas
+    console.log('[Client] Loading texture atlas...');
+    this.atlas = new TextureAtlas(this.scene, createDefaultAtlasConfig());
+    await this.atlas.load();
+    console.log('[Client] Texture atlas loaded');
 
     // Resize handler
     window.addEventListener('resize', () => {
@@ -105,8 +114,11 @@ export class VoxelClient {
         this.socket = new WebSocketClient();
         const serverUrl = `ws://${serverInfo.address}:${serverInfo.port}`;
 
-        // Create chunk manager first
-        this.chunkManager = new ChunkManager(this.socket, this.scene);
+        // Create chunk manager with atlas and registry
+        if (!this.atlas) {
+          throw new Error('Texture atlas not initialized');
+        }
+        this.chunkManager = new ChunkManager(this.socket, this.scene, this.atlas, this.registry);
 
         // Setup registry message handler
         this.setupRegistryHandler();
