@@ -92,10 +92,26 @@ cd ../protocol && npm run build
 ## Was funktioniert aktuell?
 
 - ✅ 3D-Voxel-Welt Rendering
-- ✅ Terrain-Generierung
+- ✅ Terrain-Generierung (Flat & Normal/Hilly)
 - ✅ First-Person Kamera
 - ✅ WebSocket-Kommunikation
 - ✅ Multiplayer-Verbindung
+- ✅ **World-Persistence** (Speichern/Laden)
+- ✅ **Auto-Save** (alle 30 Sekunden)
+
+## World-Persistence
+
+Der Server speichert die Welt in `packages/server/tmp/world/`:
+
+- **Erster Start**: Neue Welt wird generiert
+- **Weiterer Start**: Bestehende Welt wird geladen
+- **Generator**: Zufällig ausgewählt (flat oder normal)
+
+### Neue Welt generieren
+
+```bash
+rm -rf packages/server/tmp/world
+```
 
 ## Was fehlt noch?
 

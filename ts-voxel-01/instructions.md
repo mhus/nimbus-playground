@@ -98,3 +98,73 @@ alte dependencies, die teilweise nicht mehr genutzt werden koennen.
 
   Die gesamte Analyse und Empfehlungen sind in der README.md dokumentiert!
 ```
+
+## Server soll welt erzeugen
+
+Der server soll beim starten im ordner 'tmp/world' pruefen ob eine welt gespeichert wurde.
+Wenn nicht, soll er eine Welt generieren und in 'tmp/world' speichern. 
+Algorithmisch wie der originale Server in `ts-voxel-01/tmp/voxelsrv-server`. Es reicht,
+wenn nur eine Welt generiert wird, eine Auswahl ist nicht noetig. Die Parameter der Welt
+(flach, huegelig) soll zufällig ausgewählt werden.
+
+```text
+ Was wurde implementiert:
+
+  1. WorldPersistence-Modul (packages/server/src/world/WorldPersistence.ts)
+    - Speichern/Laden von World-Metadaten
+    - Chunk-Serialisierung mit pako-Kompression
+    - Verzeichnisstruktur-Management
+  2. Flat World Generator (packages/server/src/world/FlatWorldGenerator.ts)
+    - Flache Welt mit Schichten (Stone → Dirt → Grass)
+    - Kompatibel mit Original-Implementierung
+  3. Erweiterte World-Klasse
+    - Unterstützt beide Generator-Typen (flat & normal)
+    - Auto-Load beim Start
+    - Auto-Save alle 30 Sekunden
+    - Graceful Shutdown mit Chunk-Speicherung
+  4. Server-Integration
+    - Async Initialisierung
+    - Zufällige Generator-Auswahl
+    - Speicherung in packages/server/tmp/world/
+
+  Verzeichnisstruktur:
+
+  packages/server/tmp/world/
+  ├── world.json          # Metadaten (Seed, Generator, Version)
+  └── chunks/             # Komprimierte Chunks
+      ├── 0,0.chk
+      ├── 1,0.chk
+      └── ...
+
+  Funktionsweise:
+
+  Erster Start:
+  Created new flat world with seed 1760689511900
+  🌍 World ready
+  🎮 Voxel Server started on port 3000
+
+  Folgender Start:
+  Loaded existing flat world (seed: 1760689511900)
+  🌍 World ready
+  🎮 Voxel Server started on port 3000
+
+  Features:
+
+  - ✅ Automatisches Erkennen von existierenden Welten
+  - ✅ Zufällige Generator-Auswahl (flat oder normal)
+  - ✅ Persistierung des Seeds (konsistente Regenerierung)
+  - ✅ Auto-Save alle 30 Sekunden
+  - ✅ Graceful Shutdown mit Chunk-Speicherung
+  - ✅ Kompression mit pako
+
+  Neue Welt generieren:
+
+  rm -rf packages/server/tmp/world
+
+  Die Implementierung folgt dem Original-Design aus voxelsrv-server mit modernem TypeScript und async/await!
+```
+---
+Bitte speichere auch die Welt größe (widht, heigth) mit in der world.json Datei. 
+---
+Es werden keine chunks in `tmp/world/chunks` gespeichert und die Ansicht im Client ist auch leer.
+

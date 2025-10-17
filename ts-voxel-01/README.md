@@ -85,6 +85,33 @@ Der Client läuft auf `http://localhost:5173`
 6. Verwenden Sie **WASD** zum Bewegen, **Space/Shift** für hoch/runter
 7. Klicken Sie auf das Canvas, um den Mauszeiger zu sperren
 
+## World-Persistence
+
+Der Server speichert die Welt automatisch in `packages/server/tmp/world/`:
+
+```
+tmp/world/
+├── world.json          # Metadaten (Seed, Generator-Typ)
+└── chunks/             # Gespeicherte Chunks
+    ├── 0,0.chk
+    └── ...
+```
+
+### Verhalten
+
+- **Erster Start**: Neue Welt wird generiert (zufälliger Generator: flat oder normal)
+- **Folgender Start**: Bestehende Welt wird geladen
+- **Auto-Save**: Modifizierte Chunks werden alle 30 Sekunden gespeichert
+- **Shutdown**: Alle Chunks werden gesichert
+
+### Neue Welt generieren
+
+```bash
+rm -rf packages/server/tmp/world
+```
+
+Beim nächsten Server-Start wird eine neue Welt generiert.
+
 ## Features
 
 ### Aktuell implementiert
@@ -94,6 +121,9 @@ Der Client läuft auf `http://localhost:5173`
 - ✅ First-Person-Kamera mit Maus und Tastatur
 - ✅ Chunk-basiertes Weltmanagement
 - ✅ Debug-UI mit FPS, Position und Chunk-Count
+- ✅ **World-Persistence** (Speichern/Laden in `tmp/world/`)
+- ✅ **Zwei Generator-Typen** (Flat & Normal/Hilly)
+- ✅ **Auto-Save** (alle 30 Sekunden)
 
 ### Geplant
 - ⏳ Block-Break/Place Funktionalität

@@ -4,27 +4,39 @@ import { GameServer } from './server.js';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
-const wss = new WebSocketServer({ port: PORT });
-const gameServer = new GameServer();
+async function main() {
+  const gameServer = new GameServer();
 
-console.log(chalk.green(`🎮 Voxel Server started on port ${PORT}`));
-console.log(chalk.blue(`Connect at: ws://localhost:${PORT}`));
+  // Initialize world (load or create)
+  await gameServer.init();
 
-wss.on('connection', (ws, req) => {
-  const clientIp = req.socket.remoteAddress;
-  console.log(chalk.yellow(`New connection from ${clientIp}`));
+  const wss = new WebSocketServer({ port: PORT });
 
-  gameServer.handleConnection(ws);
-});
+  console.log(chalk.green(`🎮 Voxel Server started on port ${PORT}`));
+  console.log(chalk.blue(`Connect at: ws://localhost:${PORT}`));
 
-wss.on('error', (error) => {
-  console.error(chalk.red('WebSocket Server Error:'), error);
-});
+  wss.on('connection', (ws, req) => {
+    const clientIp = req.socket.remoteAddress;
+    console.log(chalk.yellow(`New connection from ${clientIp}`));
 
-process.on('SIGINT', () => {
-  console.log(chalk.yellow('\n🛑 Shutting down server...'));
-  wss.close(() => {
-    console.log(chalk.green('Server closed'));
-    process.exit(0);
+    gameServer.handleConnection(ws);
   });
+
+  wss.on('error', (error) => {
+    console.error(chalk.red('WebSocket Server Error:'), error);
+  });
+
+  process.on('SIGINT', async () => {
+    console.log(chalk.yellow('\n🛑 Shutting down server...'));
+    await gameServer.shutdown();
+    wss.close(() => {
+      console.log(chalk.green('Server closed'));
+      process.exit(0);
+    });
+  });
+}
+
+main().catch((error) => {
+  console.error(chalk.red('Failed to start server:'), error);
+  process.exit(1);
 });

@@ -1,23 +1,51 @@
 import type { WebSocket } from 'ws';
 import chalk from 'chalk';
-import { World } from './world/World.js';
+import { World, type GeneratorType } from './world/World.js';
 import type { Player } from './player.js';
 import { PlayerManager } from './player.js';
 import type { ClientMessage, ServerMessage } from '@voxel/protocol';
 import { MessageType } from '@voxel/protocol';
+import { join } from 'path';
 
 export class GameServer {
   private world: World;
   private playerManager: PlayerManager;
+  private initialized = false;
 
   constructor() {
-    this.world = new World({ seed: Date.now(), chunkSize: 32, worldHeight: 256 });
     this.playerManager = new PlayerManager();
 
-    console.log(chalk.blue('🌍 World initialized'));
+    // Random generator selection: flat or normal
+    const generatorType: GeneratorType = Math.random() > 0.5 ? 'normal' : 'flat';
+    const seed = Date.now();
+    const worldPath = join(process.cwd(), 'tmp', 'world');
+
+    this.world = new World(
+      { seed, chunkSize: 32, worldHeight: 256 },
+      generatorType,
+      worldPath
+    );
+  }
+
+  async init(): Promise<void> {
+    await this.world.init();
+    this.initialized = true;
+    console.log(chalk.blue('🌍 World ready'));
+  }
+
+  async shutdown(): Promise<void> {
+    console.log(chalk.yellow('Shutting down server...'));
+    await this.world.shutdown();
+    console.log(chalk.green('Server shutdown complete'));
   }
 
   handleConnection(ws: WebSocket): void {
+    if (!this.initialized) {
+      console.error(chalk.red('Server not initialized yet'));
+      ws.close();
+      return;
+    }
+
     let player: Player | null = null;
 
     ws.on('message', (data: Buffer) => {
@@ -127,18 +155,34 @@ export class GameServer {
     const spawnChunkZ = 0;
     const renderDistance = 4;
 
+    console.log(chalk.blue(`Sending ${(renderDistance * 2 + 1) ** 2} chunks to player...`));
+
+    let sentChunks = 0;
     for (let cx = -renderDistance; cx <= renderDistance; cx++) {
       for (let cz = -renderDistance; cz <= renderDistance; cz++) {
         const chunkData = this.world.getChunk(spawnChunkX + cx, 0, spawnChunkZ + cz);
         if (chunkData) {
+          // Count non-air blocks
+          let blockCount = 0;
+          for (let i = 0; i < chunkData.length; i++) {
+            if (chunkData[i] !== 0) blockCount++;
+          }
+
           this.sendMessage(ws, {
             type: MessageType.CHUNK_DATA,
             position: { x: spawnChunkX + cx, y: 0, z: spawnChunkZ + cz },
-            data: chunkData,
+            data: Array.from(chunkData), // Convert Uint8Array to regular array for JSON
           });
+          sentChunks++;
+
+          if (sentChunks === 1) {
+            console.log(chalk.gray(`  First chunk (${spawnChunkX + cx},${spawnChunkZ + cz}): ${blockCount} non-air blocks`));
+          }
         }
       }
     }
+
+    console.log(chalk.green(`  Sent ${sentChunks} chunks to player`));
 
     // Broadcast new player to others
     this.broadcast({
