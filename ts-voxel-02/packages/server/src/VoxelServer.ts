@@ -8,6 +8,8 @@ import { WorldManager } from './world/WorldManager.js';
 import { EntityManager } from './entities/EntityManager.js';
 import { FlatWorldGenerator } from './world/generators/FlatWorldGenerator.js';
 import { NormalWorldGenerator } from './world/generators/NormalWorldGenerator.js';
+import { ALL_DEFAULT_BLOCKS } from '@voxel-02/core';
+import { createRegistrySyncMessage } from '@voxel-02/protocol';
 import type { World } from './world/World.js';
 
 export interface ServerConfig {
@@ -36,7 +38,7 @@ export class VoxelServer {
 
     // Initialize systems
     this.registry = new Registry();
-    this.worldManager = new WorldManager();
+    this.worldManager = new WorldManager(this.registry);
     this.entityManager = new EntityManager();
 
     // Register world generators
@@ -51,44 +53,25 @@ export class VoxelServer {
   }
 
   /**
-   * Register default blocks
+   * Register default blocks from @voxel-02/core
    */
   private registerDefaultBlocks(): void {
-    this.registry.addBlock({
-      id: 1,
-      name: 'stone',
-      solid: true,
-      transparent: false,
-      texture: 'stone',
-      hardness: 3,
-      miningtime: 1.5,
-      tool: 'pickaxe',
-      unbreakable: false,
-    });
+    console.log(`[Server] Registering ${ALL_DEFAULT_BLOCKS.length} default blocks...`);
 
-    this.registry.addBlock({
-      id: 2,
-      name: 'dirt',
-      solid: true,
-      transparent: false,
-      texture: 'dirt',
-      hardness: 1,
-      miningtime: 0.5,
-      tool: 'any',
-      unbreakable: false,
-    });
+    for (const blockType of ALL_DEFAULT_BLOCKS) {
+      this.registry.addBlock({
+        name: blockType.name,
+        solid: blockType.solid !== false,
+        transparent: blockType.transparent || false,
+        texture: blockType.texture,
+        hardness: blockType.hardness || 0,
+        miningtime: blockType.miningtime || 0,
+        tool: blockType.tool || 'any',
+        unbreakable: blockType.unbreakable || false,
+      });
+    }
 
-    this.registry.addBlock({
-      id: 3,
-      name: 'grass',
-      solid: true,
-      transparent: false,
-      texture: ['grass_top', 'grass_side', 'dirt'],
-      hardness: 1,
-      miningtime: 0.5,
-      tool: 'any',
-      unbreakable: false,
-    });
+    console.log(`[Server] Registered ${ALL_DEFAULT_BLOCKS.length} blocks`);
   }
 
   /**
@@ -205,6 +188,27 @@ export class VoxelServer {
       type: 'welcome',
       message: 'Welcome to VoxelSrv!',
     }));
+
+    // Send registry sync (dynamic block/item/entity definitions)
+    this.sendRegistrySync(ws);
+  }
+
+  /**
+   * Send registry synchronization to client
+   */
+  private sendRegistrySync(ws: WebSocket): void {
+    const blocks = Array.from(this.registry.getAllBlocks().values());
+    const items = Array.from(this.registry.getAllItems().values());
+
+    const registryMessage = createRegistrySyncMessage(
+      blocks,
+      items,
+      [], // No entities yet
+      '1.0.0'
+    );
+
+    ws.send(JSON.stringify(registryMessage));
+    console.log(`[Server] Sent registry sync: ${blocks.length} blocks, ${items.length} items`);
   }
 
   /**

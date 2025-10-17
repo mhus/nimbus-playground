@@ -184,3 +184,14 @@ Mit den Keys Q und W soll man sich nach Links und Rechts drehen können. Zusätz
 ---
 Im Walk Modus, wenn man an einen Block stößt, soll man automatisch, maximal einen Block, nach oben rutschen. Springen soll zwei Bloecke hoch sein.
 ---
+Im ursprünglichen Projekt werden auch blocks mit namen, nicht integer ids unterstuetzt. In 
+`/ts-voxel-02/tmp/voxelsrv-server/src/default/blocks.ts` werden alle moeglichen Blocktypen definiert. Uebernehem die Konfiguration
+in das package `@voxel-02/core` als EntryTypen. Uebernehem fehlende Attribute aus
+`/ts-voxel-02/tmp/voxelsrv-server/src/lib/registry.ts' Block in EntryType.
+Fuege die Daten sinnvoll hinzu damit server und client die Typen benutzen koennen und das das system flexibel bleibt.
+Pruefe die Option, das der Server die Blocktypen/EntityTypen dynamisch ausliefern kann, anstelle von statischen Konfigurationen im Client.
+Auch die Generatoren sollen die Typen geim generieren nutzen.
+---
+> Wenn du auch die assets, also texturen, modelle, sounds durch den server ausliefern kannst, verschiebe diese dateien vom 
+client in den server und passe server und client an.
+---

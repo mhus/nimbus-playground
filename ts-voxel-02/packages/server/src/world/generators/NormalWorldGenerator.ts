@@ -5,6 +5,7 @@
 import { makeNoise2D } from 'open-simplex-noise';
 import type { ChunkData, XZ } from '@voxel-02/core';
 import type { WorldGenerator } from './WorldGenerator.js';
+import type { Registry } from '../../registry/Registry.js';
 
 /**
  * Terrain generator using simplex noise
@@ -13,18 +14,38 @@ export class NormalWorldGenerator implements WorldGenerator {
   readonly name = 'normal';
 
   private seed: number;
+  private registry: Registry;
   private noise2D: ReturnType<typeof makeNoise2D>;
 
-  private grassBlockID = 3;
-  private dirtBlockID = 2;
-  private stoneBlockID = 1;
+  // Block IDs (resolved from registry)
+  private grassBlockID: number = 0;
+  private dirtBlockID: number = 0;
+  private stoneBlockID: number = 0;
+  private sandBlockID: number = 0;
+
   private waterLevel = 62;
   private baseHeight = 64;
   private heightVariation = 32;
 
-  constructor(seed: number) {
+  constructor(seed: number, registry: Registry) {
     this.seed = seed;
+    this.registry = registry;
     this.noise2D = makeNoise2D(seed);
+
+    // Resolve block IDs from registry
+    this.resolveBlockIDs();
+  }
+
+  /**
+   * Resolve block names to IDs from registry
+   */
+  private resolveBlockIDs(): void {
+    this.grassBlockID = this.registry.getBlockID('grass') ?? 0;
+    this.dirtBlockID = this.registry.getBlockID('dirt') ?? 0;
+    this.stoneBlockID = this.registry.getBlockID('stone') ?? 0;
+    this.sandBlockID = this.registry.getBlockID('sand') ?? 0;
+
+    console.log(`[NormalWorldGenerator] Block IDs: grass=${this.grassBlockID}, dirt=${this.dirtBlockID}, stone=${this.stoneBlockID}, sand=${this.sandBlockID}`);
   }
 
   /**

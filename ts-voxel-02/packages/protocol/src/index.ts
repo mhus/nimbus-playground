@@ -11,3 +11,6 @@
 
 // Protocol handlers
 export * from './handlers/index.js';
+
+// Protocol messages
+export * from './messages/index.js';

@@ -7,9 +7,10 @@ import * as path from 'path';
 import type { WorldConfig, WorldMetadata } from '@voxel-02/core';
 import { World } from './World.js';
 import type { WorldGenerator } from './generators/WorldGenerator.js';
+import type { Registry } from '../registry/Registry.js';
 
 export interface WorldGeneratorConstructor {
-  new (seed: number): WorldGenerator;
+  new (seed: number, registry: Registry): WorldGenerator;
 }
 
 /**
@@ -21,10 +22,13 @@ export class WorldManager {
 
   private worlds: Map<string, World> = new Map();
   private generators: Map<string, WorldGeneratorConstructor> = new Map();
+  private registry: Registry;
 
   private worldsDir = './worlds';
 
-  constructor() {
+  constructor(registry: Registry) {
+    this.registry = registry;
+
     // Ensure worlds directory exists
     if (!fs.existsSync(this.worldsDir)) {
       fs.mkdirSync(this.worldsDir, { recursive: true });
@@ -65,7 +69,7 @@ export class WorldManager {
       createdAt: Date.now(),
     };
 
-    const world = new World(metadata, new GeneratorClass(config.seed), this.worldsDir);
+    const world = new World(metadata, new GeneratorClass(config.seed, this.registry), this.worldsDir);
     await world.init();
 
     this.worlds.set(config.name, world);
@@ -100,7 +104,7 @@ export class WorldManager {
         return null;
       }
 
-      const world = new World(metadata, new GeneratorClass(metadata.seed), this.worldsDir);
+      const world = new World(metadata, new GeneratorClass(metadata.seed, this.registry), this.worldsDir);
       await world.init();
 
       this.worlds.set(name, world);

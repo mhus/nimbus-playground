@@ -7,6 +7,9 @@ import { MainMenu, type ServerInfo } from './gui/MainMenu';
 import { WebSocketClient } from './network/WebSocketClient';
 import { ChunkManager } from './world/ChunkManager';
 import { PlayerController } from './player/PlayerController';
+import { ClientRegistry } from './registry/ClientRegistry';
+import { RegistryMessageType, createRegistryAckMessage } from '@voxel-02/protocol';
+import type { RegistryMessage } from '@voxel-02/protocol';
 
 /**
  * Main client class for VoxelSrv
@@ -20,10 +23,12 @@ export class VoxelClient {
   private socket?: WebSocketClient;
   private chunkManager?: ChunkManager;
   private playerController?: PlayerController;
+  private registry: ClientRegistry;
   private connected = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
+    this.registry = new ClientRegistry();
   }
 
   /**
@@ -103,13 +108,13 @@ export class VoxelClient {
         // Create chunk manager first
         this.chunkManager = new ChunkManager(this.socket, this.scene);
 
+        // Setup registry message handler
+        this.setupRegistryHandler();
+
         // Connect to server
         await this.socket.connect(serverUrl);
 
-        console.log('[Client] Connected successfully, requesting chunks...');
-
-        // Request chunks around spawn (0, 0) immediately after connection
-        this.chunkManager.requestChunksAround(0, 0, 3);
+        console.log('[Client] Connected successfully, waiting for registry sync...');
 
         // Create player controller for physics and collision
         this.playerController = new PlayerController(this.scene, this.camera, this.chunkManager);
@@ -148,6 +153,53 @@ export class VoxelClient {
 
     // Setup pointer lock on canvas click (must be after connection is established)
     this.setupPointerLock();
+  }
+
+  /**
+   * Setup registry message handler
+   */
+  private setupRegistryHandler(): void {
+    if (!this.socket) return;
+
+    // Listen for registry sync message
+    this.socket.on(RegistryMessageType.REGISTRY_SYNC, (message: RegistryMessage) => {
+      if (message.type === RegistryMessageType.REGISTRY_SYNC) {
+        console.log('[Client] Received registry sync from server');
+
+        // Load registry data
+        this.registry.loadFromServer(
+          message.data.blocks,
+          message.data.items,
+          message.data.entities,
+          message.data.version
+        );
+
+        // Send acknowledgement
+        const ackMessage = createRegistryAckMessage(
+          true,
+          message.data.version,
+          {
+            blocks: message.data.blocks.length,
+            items: message.data.items.length,
+            entities: message.data.entities.length,
+          }
+        );
+
+        this.socket!.send(JSON.stringify(ackMessage));
+
+        // Now request chunks (registry is loaded)
+        console.log('[Client] Registry synced, requesting chunks...');
+        this.chunkManager?.requestChunksAround(0, 0, 3);
+      }
+    });
+
+    // Listen for registry updates
+    this.socket.on(RegistryMessageType.REGISTRY_UPDATE, (message: RegistryMessage) => {
+      if (message.type === RegistryMessageType.REGISTRY_UPDATE) {
+        console.log('[Client] Received registry update from server');
+        this.registry.applyUpdate(message.data);
+      }
+    });
   }
 
   /**
@@ -295,16 +347,20 @@ export class VoxelClient {
   }
 
   /**
-   * Get block name from ID
+   * Get block name from ID (using registry)
    */
   private getBlockName(blockId: number): string {
-    switch (blockId) {
-      case 0: return 'Air';
-      case 1: return 'Stone';
-      case 2: return 'Dirt';
-      case 3: return 'Grass';
-      default: return `Unknown (${blockId})`;
-    }
+    if (blockId === 0) return 'Air';
+
+    const block = this.registry.getBlockByID(blockId);
+    return block ? block.name : `Unknown (${blockId})`;
+  }
+
+  /**
+   * Get client registry (for debugging)
+   */
+  getRegistry(): ClientRegistry {
+    return this.registry;
   }
 
   /**

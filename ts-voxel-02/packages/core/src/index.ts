@@ -12,3 +12,6 @@ export * from './helpers.js';
 export * from './models/Entity.js';
 export * from './models/World.js';
 export * from './models/Inventory.js';
+
+// Registry System
+export * from './registry/index.js';
