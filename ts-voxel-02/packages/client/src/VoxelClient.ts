@@ -194,7 +194,13 @@ export class VoxelClient {
     // Chunk manager info
     if (this.chunkManager) {
       const chunkCount = this.chunkManager.getLoadedChunksCount();
-      console.log(`\n📦 Loaded Chunks: ${chunkCount}`);
+      const renderDistance = this.chunkManager.getRenderDistance();
+      const playerChunk = this.chunkManager.getPlayerChunk();
+
+      console.log(`\n📦 Chunk Loading:`);
+      console.log(`   Loaded Chunks: ${chunkCount}`);
+      console.log(`   Render Distance: ${renderDistance} chunks (${renderDistance * 2 + 1}×${renderDistance * 2 + 1} grid)`);
+      console.log(`   Player Chunk: (${playerChunk.x}, ${playerChunk.z})`);
 
       // Access internal chunk data
       const chunks = (this.chunkManager as any).chunks as Map<string, any>;

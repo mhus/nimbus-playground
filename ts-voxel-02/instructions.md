@@ -163,4 +163,5 @@ Mit der F Taste kann man zwischen flight und walk mode wechseln. Im Flight mode 
 ---
 Um die Welt, Voxels und Texturen zu debuggen moechte ich, wenn ich wenn ich die Teste '\' druecke einen dump der Welt auf console ausgeben haben.
 ---
-
+Nachladen von Welt-Dateien-Chunks:
+Es wird nicht immer alles geladen, sondern maximal 250 

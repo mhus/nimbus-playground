@@ -24,6 +24,13 @@ export class ChunkManager {
   private renderer: ChunkRenderer;
   private chunkSize = 32;
 
+  // Dynamic loading settings
+  private renderDistance = 3; // Chunks to load around player
+  private unloadDistance = 5; // Chunks further than this will be unloaded
+  private lastPlayerChunk: { x: number, z: number } = { x: 0, z: 0 };
+  private updateInterval = 1000; // Check for new chunks every 1 second
+  private lastUpdateTime = 0;
+
   constructor(socket: WebSocketClient, scene: Scene) {
     this.socket = socket;
     this.scene = scene;
@@ -37,6 +44,9 @@ export class ChunkManager {
     this.socket.on('WorldChunkLoad', (data) => {
       this.onChunkLoad(data);
     });
+
+    // Start update loop for dynamic chunk loading
+    this.startUpdateLoop();
   }
 
   /**
@@ -166,6 +176,109 @@ export class ChunkManager {
    */
   getLoadedChunksCount(): number {
     return this.chunks.size;
+  }
+
+  /**
+   * Start update loop for dynamic chunk loading
+   */
+  private startUpdateLoop(): void {
+    this.scene.onBeforeRenderObservable.add(() => {
+      const currentTime = performance.now();
+      if (currentTime - this.lastUpdateTime > this.updateInterval) {
+        this.lastUpdateTime = currentTime;
+        this.updateChunks();
+      }
+    });
+  }
+
+  /**
+   * Update chunks based on camera position
+   */
+  updateChunksAroundPosition(worldX: number, worldZ: number): void {
+    const chunkX = Math.floor(worldX / this.chunkSize);
+    const chunkZ = Math.floor(worldZ / this.chunkSize);
+
+    // Check if player moved to a new chunk
+    if (chunkX !== this.lastPlayerChunk.x || chunkZ !== this.lastPlayerChunk.z) {
+      console.log(`[ChunkManager] Player moved to chunk (${chunkX}, ${chunkZ})`);
+      this.lastPlayerChunk = { x: chunkX, z: chunkZ };
+
+      // Request new chunks
+      this.requestChunksAround(worldX, worldZ, this.renderDistance);
+
+      // Unload far chunks
+      this.unloadDistantChunks(chunkX, chunkZ);
+    }
+  }
+
+  /**
+   * Update chunks (called periodically)
+   */
+  private updateChunks(): void {
+    // Get camera position from scene
+    const camera = this.scene.activeCamera;
+    if (!camera) return;
+
+    const position = camera.position;
+    this.updateChunksAroundPosition(position.x, position.z);
+  }
+
+  /**
+   * Unload chunks that are too far from player
+   */
+  private unloadDistantChunks(playerChunkX: number, playerChunkZ: number): void {
+    const chunksToUnload: string[] = [];
+
+    for (const [key, chunk] of this.chunks.entries()) {
+      const dx = Math.abs(chunk.chunkX - playerChunkX);
+      const dz = Math.abs(chunk.chunkZ - playerChunkZ);
+      const distance = Math.max(dx, dz);
+
+      if (distance > this.unloadDistance) {
+        chunksToUnload.push(key);
+      }
+    }
+
+    for (const key of chunksToUnload) {
+      const parts = key.split(',');
+      const chunkX = parseInt(parts[0]);
+      const chunkZ = parseInt(parts[1]);
+      this.unloadChunk(chunkX, chunkZ);
+    }
+
+    if (chunksToUnload.length > 0) {
+      console.log(`[ChunkManager] Unloaded ${chunksToUnload.length} distant chunks`);
+    }
+  }
+
+  /**
+   * Set render distance (how many chunks to load around player)
+   */
+  setRenderDistance(distance: number): void {
+    this.renderDistance = distance;
+    console.log(`[ChunkManager] Render distance set to ${distance} chunks`);
+  }
+
+  /**
+   * Set unload distance (chunks further than this will be unloaded)
+   */
+  setUnloadDistance(distance: number): void {
+    this.unloadDistance = distance;
+    console.log(`[ChunkManager] Unload distance set to ${distance} chunks`);
+  }
+
+  /**
+   * Get render distance
+   */
+  getRenderDistance(): number {
+    return this.renderDistance;
+  }
+
+  /**
+   * Get current player chunk
+   */
+  getPlayerChunk(): { x: number, z: number } {
+    return { ...this.lastPlayerChunk };
   }
 
   /**
