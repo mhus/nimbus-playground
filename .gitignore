@@ -29,3 +29,4 @@ target
 jmonkey-example03-native
 node_modules
 dist
+/ts-voxel-01/tmp/
