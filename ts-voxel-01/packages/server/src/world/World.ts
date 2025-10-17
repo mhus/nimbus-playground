@@ -57,6 +57,40 @@ export class World {
 
     await this.persistence.saveWorldMetadata(metadata);
     console.log(`Created new ${this.generatorType} world with seed ${this.config.seed}`);
+
+    // Generate all chunks immediately
+    await this.generateAllChunks();
+  }
+
+  private async generateAllChunks(): Promise<void> {
+    const chunkCount = this.config.worldSize / this.config.chunkSize;
+    const totalChunks = chunkCount * chunkCount;
+
+    console.log(`[World] Generating ${totalChunks} chunks (${chunkCount}x${chunkCount})...`);
+
+    let generatedCount = 0;
+    for (let x = 0; x < chunkCount; x++) {
+      for (let z = 0; z < chunkCount; z++) {
+        const chunkX = x;
+        const chunkY = 0; // Only y=0 layer for now
+        const chunkZ = z;
+
+        const key = chunkPositionToKey(chunkX, chunkY, chunkZ);
+        const chunk = this.generateChunk(chunkX, chunkZ);
+
+        this.chunks.set(key, chunk);
+        this.modifiedChunks.add(key);
+
+        generatedCount++;
+        if (generatedCount % 10 === 0 || generatedCount === totalChunks) {
+          console.log(`[World] Generated ${generatedCount}/${totalChunks} chunks`);
+        }
+      }
+    }
+
+    console.log(`[World] All ${totalChunks} chunks generated, saving to disk...`);
+    await this.saveModifiedChunks();
+    console.log('[World] Initial world generation complete');
   }
 
   private async loadWorld(): Promise<void> {
@@ -146,9 +180,16 @@ export class World {
       return new Uint8Array(this.config.chunkSize ** 3);
     }
 
-    // Try to load from persistence (synchronously for now)
-    // Note: In production, this should be async, but for simplicity we generate
-    return this.generateChunk(x, z);
+    // Since all chunks are pre-generated, this should normally not happen
+    // But as a fallback, we generate the chunk on-demand
+    console.log(`[World] Warning: Chunk (${x},${y},${z}) was not pre-generated, generating now`);
+    const chunk = this.generateChunk(x, z);
+
+    // Mark newly generated chunk as modified so it will be saved
+    const key = chunkPositionToKey(x, y, z);
+    this.modifiedChunks.add(key);
+
+    return chunk;
   }
 
   private generateChunk(x: number, z: number): Uint8Array {

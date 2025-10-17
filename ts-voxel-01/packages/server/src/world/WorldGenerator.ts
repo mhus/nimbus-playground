@@ -28,6 +28,7 @@ export class WorldGenerator {
    * Generate a chunk with hilly terrain
    */
   generateChunk(chunkX: number, chunkZ: number): Uint8Array {
+    console.log(`[WorldGenerator] Generating chunk at (${chunkX}, ${chunkZ})`);
     const data = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
 
     for (let x = 0; x < CHUNK_SIZE; x++) {

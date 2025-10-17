@@ -162,6 +162,7 @@ export class GameServer {
       for (let cz = -renderDistance; cz <= renderDistance; cz++) {
         const chunkData = this.world.getChunk(spawnChunkX + cx, 0, spawnChunkZ + cz);
         if (chunkData) {
+            console.log(chalk.gray(`  Sending join chunk at (${spawnChunkX + cx},${spawnChunkZ + cz})`));
           // Count non-air blocks
           let blockCount = 0;
           for (let i = 0; i < chunkData.length; i++) {

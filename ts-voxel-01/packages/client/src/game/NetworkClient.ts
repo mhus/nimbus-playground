@@ -45,9 +45,11 @@ export class NetworkClient {
   private handleMessage(message: ServerMessage): void {
     switch (message.type) {
       case MessageType.WORLD_DATA:
+        console.log('[NetworkClient] Received world data:', message);
         this.emit('worldData', message);
         break;
       case MessageType.CHUNK_DATA:
+        console.log('[NetworkClient] Received chunk data:', message);
         this.emit('chunkData', message);
         break;
       case MessageType.PLAYER_JOINED:
