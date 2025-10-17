@@ -240,7 +240,10 @@ export class VoxelServer {
     if (!this.mainWorld) return;
 
     try {
+      console.log(`[Server] Chunk request: ${chunkX}, ${chunkZ}`);
       const chunk = await this.mainWorld.getChunk([chunkX, chunkZ]);
+
+      console.log(`[Server] Sending chunk ${chunkX}, ${chunkZ} with ${chunk.data.length} blocks`);
 
       ws.send(JSON.stringify({
         type: 'chunk_data',
@@ -248,6 +251,8 @@ export class VoxelServer {
         chunkZ,
         data: Array.from(chunk.data),  // Convert Uint16Array to regular array for JSON
       }));
+
+      console.log(`[Server] Sent chunk ${chunkX}, ${chunkZ}`);
     } catch (error) {
       console.error(`[Server] Failed to send chunk (${chunkX}, ${chunkZ}):`, error);
     }

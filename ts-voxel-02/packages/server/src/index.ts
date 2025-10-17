@@ -5,7 +5,7 @@
 import { VoxelServer } from './VoxelServer.js';
 
 const server = new VoxelServer({
-  port: 3001,
+  port: 3003,
   worldName: 'world',
   worldSeed: Math.floor(Math.random() * 1000000),
   generator: 'normal',  // 'flat' or 'normal'

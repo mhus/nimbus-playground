@@ -150,3 +150,7 @@ Du kannst schritt fuer schritt die anwendung migrieren:
 Der Client ist aber nicht so wie in `ts-voxel-02/tmp/voxelsrv`. Am Anfang fehlt z.b. das menu mit dem man sich einloggen 
 und den server angeben kann.
 ---
+Der client zeigt aber keine welt an. Es gibt nur eine leere szene mit einer kamera und licht.
+---
+Warum uebernimmst du das system nicht von `ts-voxel-02/tmp/voxelsrv`? Das ist was wir hier erreichen wollen. Die Migration des projektes.
+---

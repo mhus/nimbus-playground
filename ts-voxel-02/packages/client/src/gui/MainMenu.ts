@@ -105,7 +105,7 @@ export class MainMenu {
     addressInput.fontSize = 14;
     addressInput.color = 'white';
     addressInput.background = '#333333';
-    addressInput.placeholderText = 'localhost:3001';
+    addressInput.placeholderText = 'localhost';
     addressInput.text = 'localhost';
     addressInput.thickness = 1;
     addressInput.paddingBottom = '15px';
@@ -126,8 +126,8 @@ export class MainMenu {
     portInput.fontSize = 14;
     portInput.color = 'white';
     portInput.background = '#333333';
-    portInput.placeholderText = '3001';
-    portInput.text = '3001';
+    portInput.placeholderText = '3003';
+    portInput.text = '3003';
     portInput.thickness = 1;
     portInput.paddingBottom = '25px';
 

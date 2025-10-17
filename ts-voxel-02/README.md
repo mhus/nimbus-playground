@@ -59,14 +59,14 @@ npm run build
 ```bash
 npm run dev:server
 ```
-Server läuft auf Port 3001.
+Server läuft auf Port 3003.
 
 **Client starten:**
 ```bash
 npm run dev:client
 ```
-Client öffnet auf http://localhost:3000 mit Main Menu:
-- **Multiplayer**: Server-Adresse eingeben (z.B. `localhost:3001`)
+Client öffnet auf http://localhost:3001 mit Main Menu:
+- **Multiplayer**: Server-Adresse eingeben (z.B. `localhost:3003`)
 - **Singleplayer**: Embedded Server im Browser (geplant)
 
 Nach dem Connect: **WASD** bewegen, **Maus** umschauen.
