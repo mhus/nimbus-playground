@@ -145,7 +145,8 @@ export class World {
     const blockData = new Uint16Array(data.buffer, data.byteOffset, data.byteLength / 2);
 
     return {
-      id: chunkID,
+      chunkX: chunkID[0],
+      chunkZ: chunkID[1],
       data: blockData,
       height: this.metadata.worldHeight,
     };
@@ -162,7 +163,9 @@ export class World {
     const chunkPath = path.join(this.chunksPath, `${key}.chk`);
 
     // Simple format: just compress the raw Uint16Array
-    const buffer = Buffer.from(chunk.data.buffer, chunk.data.byteOffset, chunk.data.byteLength);
+    const buffer = chunk.data instanceof Uint16Array
+      ? Buffer.from(chunk.data.buffer, chunk.data.byteOffset, chunk.data.byteLength)
+      : Buffer.from(new Uint16Array(chunk.data).buffer);
     const compressed = await deflate(buffer);
 
     fs.writeFileSync(chunkPath, compressed);

@@ -4,12 +4,19 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { BlockType, ItemType } from '@voxel-02/core';
+import type { BlockType, ItemType, BlockShape, ToolType } from '@voxel-02/core';
 
-export interface BlockDefinition extends BlockType {
+export interface BlockDefinition {
+  id?: number;
+  name: string;
+  displayName?: string;
+  shape: BlockShape;
+  texture: string | string[];
+  solid: boolean;
+  transparent: boolean;
   hardness: number;
   miningtime: number;
-  tool: string | string[];
+  tool: ToolType;
   unbreakable?: boolean;
 }
 
@@ -52,11 +59,13 @@ export class Registry {
     this.blocks.set('air', {
       id: 0,
       name: 'air',
+      shape: 0 as BlockShape, // BlockShape.CUBE
+      texture: '',
       solid: false,
       transparent: true,
       hardness: 0,
       miningtime: 0,
-      tool: 'any',
+      tool: 'any' as ToolType,
     });
     this.blockPalette.set('air', 0);
     this.blockIDMap.set(0, 'air');

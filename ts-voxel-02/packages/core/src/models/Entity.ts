@@ -88,15 +88,4 @@ export interface IEntity {
   remove(): void;
 }
 
-/**
- * Entity type definition
- */
-export interface EntityType {
-  id: string;
-  name: string;
-  model: string;
-  texture: string;
-  maxHealth: number;
-  hitbox: XYZ;
-  tick?: (entity: IEntity, deltaTime: number) => void;
-}
+// Note: EntityType is now defined in registry/EntityType.ts

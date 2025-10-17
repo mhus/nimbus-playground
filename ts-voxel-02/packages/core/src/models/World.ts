@@ -4,59 +4,8 @@
 
 import type { XYZ, XZ } from '../types.js';
 
-/**
- * Block type definition
- */
-export interface BlockType {
-  id: number;
-  name: string;
-  solid: boolean;
-  transparent: boolean;
-  texture?: string | string[];  // Single texture or array [top, sides, bottom]
-  model?: string;
-  hardness?: number;
-  tool?: string;
-}
-
-/**
- * Item type definition
- */
-export interface ItemType {
-  id: string;
-  name: string;
-  stackSize: number;
-  texture?: string;
-  tool?: {
-    type: string;
-    power: number;
-  };
-}
-
-/**
- * Chunk data structure
- */
-export interface ChunkData {
-  /**
-   * Chunk position [x, z]
-   */
-  id: XZ;
-
-  /**
-   * Block data (Uint16Array of block IDs)
-   * Size: CHUNK_SIZE * CHUNK_SIZE * height
-   */
-  data: Uint16Array;
-
-  /**
-   * Chunk height (number of vertical blocks)
-   */
-  height: number;
-
-  /**
-   * Last modification timestamp
-   */
-  modified?: number;
-}
+// Note: BlockType, ItemType, and ChunkData are now defined in registry/ and models/
+// This file only contains world-specific interfaces
 
 /**
  * World configuration

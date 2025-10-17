@@ -68,7 +68,8 @@ export class FlatWorldGenerator implements WorldGenerator {
     }
 
     return {
-      id: [chunkX, chunkZ],
+      chunkX,
+      chunkZ,
       data,
       height,
     };

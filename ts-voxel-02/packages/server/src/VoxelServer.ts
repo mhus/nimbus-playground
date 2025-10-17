@@ -74,9 +74,11 @@ export class VoxelServer {
     for (const blockType of ALL_DEFAULT_BLOCKS) {
       this.registry.addBlock({
         name: blockType.name,
+        displayName: blockType.displayName,
+        shape: blockType.shape,
+        texture: blockType.texture,
         solid: blockType.solid !== false,
         transparent: blockType.transparent || false,
-        texture: blockType.texture,
         hardness: blockType.hardness || 0,
         miningtime: blockType.miningtime || 0,
         tool: blockType.tool || 'any',
@@ -92,7 +94,7 @@ export class VoxelServer {
    */
   private registerDefaultItems(): void {
     this.registry.addItem({
-      id: 'stone',
+      id: 1,
       name: 'Stone',
       stackSize: 64,
       texture: 'stone',
@@ -101,7 +103,7 @@ export class VoxelServer {
     });
 
     this.registry.addItem({
-      id: 'dirt',
+      id: 2,
       name: 'Dirt',
       stackSize: 64,
       texture: 'dirt',
@@ -110,7 +112,7 @@ export class VoxelServer {
     });
 
     this.registry.addItem({
-      id: 'grass',
+      id: 3,
       name: 'Grass Block',
       stackSize: 64,
       texture: 'grass_top',
@@ -138,9 +140,9 @@ export class VoxelServer {
     this.registry.finalize();
 
     // Create or load main world
-    this.mainWorld = await this.worldManager.load(this.config.worldName);
-    if (!this.mainWorld) {
-      this.mainWorld = await this.worldManager.create({
+    let world = await this.worldManager.load(this.config.worldName);
+    if (!world) {
+      world = await this.worldManager.create({
         name: this.config.worldName,
         seed: this.config.worldSeed,
         generator: this.config.generator,
@@ -149,9 +151,11 @@ export class VoxelServer {
       });
     }
 
-    if (!this.mainWorld) {
+    if (!world) {
       throw new Error('Failed to create or load world');
     }
+
+    this.mainWorld = world;
 
     // Start WebSocket server
     this.wss = new WebSocketServer({ port: this.config.port });
@@ -238,8 +242,23 @@ export class VoxelServer {
    * Send registry synchronization to client
    */
   private sendRegistrySync(ws: WebSocket): void {
-    const blocks = Array.from(this.registry.getAllBlocks().values());
+    const blockDefs = Array.from(this.registry.getAllBlocks().values());
     const items = Array.from(this.registry.getAllItems().values());
+
+    // Convert BlockDefinition to BlockType for client
+    const blocks = blockDefs.map(b => ({
+      id: b.id,
+      name: b.name,
+      displayName: b.displayName,
+      shape: b.shape,
+      texture: b.texture,
+      solid: b.solid,
+      transparent: b.transparent,
+      hardness: b.hardness,
+      miningtime: b.miningtime,
+      tool: b.tool,
+      unbreakable: b.unbreakable,
+    }));
 
     const registryMessage = createRegistrySyncMessage(
       blocks,

@@ -106,7 +106,8 @@ export class NormalWorldGenerator implements WorldGenerator {
     }
 
     return {
-      id: [chunkX, chunkZ],
+      chunkX,
+      chunkZ,
       data,
       height,
     };
