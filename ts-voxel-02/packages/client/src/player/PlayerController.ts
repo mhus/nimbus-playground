@@ -41,6 +41,11 @@ export class PlayerController {
   private moveUp = false;
   private moveDown = false;
   private wantJump = false;
+  private turnLeft = false;
+  private turnRight = false;
+
+  // Camera rotation settings
+  private turnSpeed = 1.5; // Radians per second
 
   constructor(scene: Scene, camera: FreeCamera, chunkManager: ChunkManager) {
     this.scene = scene;
@@ -91,6 +96,12 @@ export class PlayerController {
             this.toggleMode();
           }
           break;
+        case 'q':
+          this.turnLeft = isDown;
+          break;
+        case 'e':
+          this.turnRight = isDown;
+          break;
       }
     });
   }
@@ -131,10 +142,25 @@ export class PlayerController {
     // Cap delta time to prevent large jumps
     deltaTime = Math.min(deltaTime, 0.1);
 
+    // Handle camera rotation
+    this.updateCameraRotation(deltaTime);
+
     if (this.mode === MovementMode.WALK) {
       this.updateWalkMode(deltaTime);
     } else {
       this.updateFlightMode(deltaTime);
+    }
+  }
+
+  /**
+   * Update camera rotation from keyboard input
+   */
+  private updateCameraRotation(deltaTime: number): void {
+    if (this.turnLeft) {
+      this.camera.rotation.y -= this.turnSpeed * deltaTime;
+    }
+    if (this.turnRight) {
+      this.camera.rotation.y += this.turnSpeed * deltaTime;
     }
   }
 
