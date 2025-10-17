@@ -182,4 +182,5 @@ Im Flugmodus fliegt man nicht mehr in Blickrichtung. Wenn der flugmodus aktiv is
 ---
 Mit den Keys Q und W soll man sich nach Links und Rechts drehen können. Zusätzlich zur Mausbewegung.
 ---
-> Im Walk Modus, wenn man an einen Block stößt, soll man automatisch, maximal einen Block, nach oben rutschen. Springen soll zwei Bloecke hoche sein.
+Im Walk Modus, wenn man an einen Block stößt, soll man automatisch, maximal einen Block, nach oben rutschen. Springen soll zwei Bloecke hoch sein.
+---

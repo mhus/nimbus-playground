@@ -24,8 +24,9 @@ export class PlayerController {
   // Movement settings
   private walkSpeed = 4.3; // Blocks per second
   private flySpeed = 10.5; // Blocks per second
-  private jumpVelocity = 8.0;
+  private jumpVelocity = 10.0; // Increased for 2-block jump
   private gravity = -26.0; // Blocks per second^2
+  private maxStepHeight = 1.0; // Auto-step up to 1 block
 
   // Player dimensions
   private playerHeight = 1.8;
@@ -309,6 +310,10 @@ export class PlayerController {
     // X axis
     const testX = new Vector3(toPos.x, fromPos.y, fromPos.z);
     if (this.checkCollisionAtPosition(testX)) {
+      // Try auto-step in walk mode
+      if (this.mode === MovementMode.WALK && this.tryAutoStep(fromPos, toPos, finalPos)) {
+        return finalPos; // Auto-step successful
+      }
       finalPos.x = fromPos.x;
     }
 
@@ -332,10 +337,40 @@ export class PlayerController {
     // Z axis
     const testZ = new Vector3(finalPos.x, finalPos.y, toPos.z);
     if (this.checkCollisionAtPosition(testZ)) {
+      // Try auto-step in walk mode
+      if (this.mode === MovementMode.WALK && this.tryAutoStep(fromPos, toPos, finalPos)) {
+        return finalPos; // Auto-step successful
+      }
       finalPos.z = fromPos.z;
     }
 
     return finalPos;
+  }
+
+  /**
+   * Try to automatically step up when hitting a wall (max 1 block)
+   */
+  private tryAutoStep(fromPos: Vector3, toPos: Vector3, finalPos: Vector3): boolean {
+    // Only auto-step when on ground
+    if (!this.isOnGround) {
+      return false;
+    }
+
+    // Try stepping up in small increments
+    const stepIncrement = 0.1;
+    for (let stepHeight = stepIncrement; stepHeight <= this.maxStepHeight; stepHeight += stepIncrement) {
+      const steppedPos = toPos.clone();
+      steppedPos.y = fromPos.y + stepHeight;
+
+      // Check if we can fit at this height
+      if (!this.checkCollisionAtPosition(steppedPos)) {
+        // We can step up to this height
+        finalPos.copyFrom(steppedPos);
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
