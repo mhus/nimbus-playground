@@ -22,6 +22,8 @@ export class NormalWorldGenerator implements WorldGenerator {
   private dirtBlockID: number = 0;
   private stoneBlockID: number = 0;
   private sandBlockID: number = 0;
+  private cobblestoneBlockID: number = 0;
+  private logBlockID: number = 0;
 
   private waterLevel = 62;
   private baseHeight = 64;
@@ -44,8 +46,10 @@ export class NormalWorldGenerator implements WorldGenerator {
     this.dirtBlockID = this.registry.getBlockID('dirt') ?? 0;
     this.stoneBlockID = this.registry.getBlockID('stone') ?? 0;
     this.sandBlockID = this.registry.getBlockID('sand') ?? 0;
+    this.cobblestoneBlockID = this.registry.getBlockID('cobblestone') ?? 0;
+    this.logBlockID = this.registry.getBlockID('log') ?? 0;
 
-    console.log(`[NormalWorldGenerator] Block IDs: grass=${this.grassBlockID}, dirt=${this.dirtBlockID}, stone=${this.stoneBlockID}, sand=${this.sandBlockID}`);
+    console.log(`[NormalWorldGenerator] Block IDs: grass=${this.grassBlockID}, dirt=${this.dirtBlockID}, stone=${this.stoneBlockID}, sand=${this.sandBlockID}, cobblestone=${this.cobblestoneBlockID}, log=${this.logBlockID}`);
   }
 
   /**
@@ -85,10 +89,27 @@ export class NormalWorldGenerator implements WorldGenerator {
         for (let y = 0; y < height; y++) {
           const index = x + y * chunkSize + z * chunkSize * height;
 
+          // Create a checkerboard pattern for testing different textures
+          const isCheckerboard = ((worldX + worldZ) % 4 < 2);
+
           // Only generate top 2 layers for performance/testing
           if (y === terrainHeight - 1) {
-            // Top layer: Grass
-            data[index] = this.grassBlockID;
+            // Top layer: Vary between grass, stone, sand, cobblestone, log
+            if (isCheckerboard) {
+              // Checkerboard pattern 1
+              if ((worldX % 4) === 0) {
+                data[index] = this.stoneBlockID;
+              } else if ((worldX % 4) === 1) {
+                data[index] = this.sandBlockID;
+              } else if ((worldX % 4) === 2) {
+                data[index] = this.cobblestoneBlockID;
+              } else {
+                data[index] = this.logBlockID;
+              }
+            } else {
+              // Default grass
+              data[index] = this.grassBlockID;
+            }
           } else if (y === terrainHeight - 2) {
             // Second layer: Dirt
             data[index] = this.dirtBlockID;

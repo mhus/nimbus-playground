@@ -250,7 +250,7 @@ export class TextureAtlas {
       return this.blockUVCache.get(block.name)!;
     }
 
-    console.log(`[TextureAtlas] Loading textures for block: ${block.name}`);
+    console.log(`[TextureAtlas] Loading textures for block: ${block.name}`, block.texture);
 
     let faceUVs: BlockFaceUVs;
 
